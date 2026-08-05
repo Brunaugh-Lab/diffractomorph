@@ -235,17 +235,22 @@ def test_kernel_build_api_requires_external_registry_and_calibration_date(tmp_pa
 
     with pytest.raises(ValueError, match="cal_date is required"):
         mie_build.build_kernel_from_files(
-            "missing.rtf", "missing.csv", "compound-y", registry=tmp_path / "registry.yaml",
+            "missing.rtf", "missing.csv", "compound-y", lens="R3",
+            registry=tmp_path / "registry.yaml",
         )
     with pytest.raises(ValueError, match="outside the installed"):
         mie_build.build_kernel_from_files(
-            "missing.rtf", "missing.csv", "compound-y", cal_date="2026-08-04",
+            "missing.rtf", "missing.csv", "compound-y", lens="R3", cal_date="2026-08-04",
             registry=Path(mie_build.__file__).parent / "registry.yaml",
         )
     with pytest.raises(ValueError, match="registry is required"):
-        mie_build.resolve_kernel_for_day("2026-08-04", "compound-y")
+        mie_build.resolve_kernel_for_day("2026-08-04", "compound-y", lens="R3")
+    with pytest.raises(ValueError, match="lens is required"):
+        mie_build.resolve_kernel_for_day(
+            "2026-08-04", "compound-y", registry=tmp_path / "registry.yaml",
+        )
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         mie_build.build_kernel_from_files(
-            "missing.rtf", "missing.csv", "compound-y", cal_date="20260804",
+            "missing.rtf", "missing.csv", "compound-y", lens="R3", cal_date="20260804",
             registry=tmp_path / "registry.yaml",
         )

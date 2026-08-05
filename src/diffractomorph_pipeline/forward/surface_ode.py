@@ -139,7 +139,8 @@ def _integrate(p: Parameters, psd: PSD, dose_mg: float, ph_bulk: float, shape,
         ph_bulk=np.array(ph_b), ph_surf=np.array(ph_s), qundiss=q_t, radius_um=radius_um,
         diam0_um=diam_um,
         inputs={"dose_mg": dose_mg, "ph_bulk": ph_bulk, "total_mass_mmol": total_mass,
-                "s0_uM": p.s0_uM, "regime": p.regime, "n_bins": int(live.sum()),
+                "s0_uM": p.s0_uM, "v_diss_mL": p.v_diss_mL,
+                "regime": p.regime, "n_bins": int(live.sum()),
                 **(extra_inputs or {})})
 
 

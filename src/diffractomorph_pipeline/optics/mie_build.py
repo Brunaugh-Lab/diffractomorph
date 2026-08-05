@@ -93,7 +93,7 @@ def _norm(v):
 
 # ── The two fits (spec §3a) ──────────────────────────────────────────────────
 
-def fit_geometry(nist_glass_qc, nist_number_psd, lens="R3", *,
+def fit_geometry(nist_glass_qc, nist_number_psd, lens=None, *,
                  cal_date, xm=DEFAULT_GRID) -> Geometry:
     """Fit θ_min, θ_max from the NIST glass-bead standard (RI 1.51, non-absorbing).
 
@@ -101,6 +101,7 @@ def fit_geometry(nist_glass_qc, nist_number_psd, lens="R3", *,
     the bead **number** fraction over the size grid. Geometry is isolated here
     (non-absorbing standard) so the later RI fit cannot confound it.
     """
+    lens = _lens_id(lens)
     cal_date = _calibration_date_string(cal_date)
     I = _norm(nist_glass_qc)
     n = _norm(nist_number_psd)
@@ -222,7 +223,14 @@ def _calibration_date_string(value) -> str:
     return value
 
 
-def resolve_kernel_for_day(date, drug, registry=None, lens="R3", qc_dir=None,
+def _lens_id(value) -> str:
+    if value not in LENS_THETA_MIN_DEG:
+        allowed = ", ".join(sorted(LENS_THETA_MIN_DEG))
+        raise ValueError(f"lens is required and must be one of: {allowed}")
+    return str(value)
+
+
+def resolve_kernel_for_day(date, drug, registry=None, lens=None, qc_dir=None,
                            rebuild=False, confirm=None) -> MieKernel:
     """Pick (or build) the kernel valid for ``date`` & ``drug`` (spec §3c).
 
@@ -237,6 +245,7 @@ def resolve_kernel_for_day(date, drug, registry=None, lens="R3", qc_dir=None,
 
     ``confirm`` overrides interactivity (True/False); default = auto-detect a TTY.
     """
+    lens = _lens_id(lens)
     rpath = _external_registry_path(registry)
     reg = load_registry(rpath)
     reg_dir = rpath.parent
@@ -244,7 +253,7 @@ def resolve_kernel_for_day(date, drug, registry=None, lens="R3", qc_dir=None,
 
     candidates = [
         e for e in reg.get("kernels", [])
-        if e["keys"].get("drug") == drug and e["keys"].get("lens", "R3") == lens
+        if e["keys"].get("drug") == drug and e["keys"].get("lens") == lens
         and _as_date(e["keys"]["geometry_cal_date"]) <= target
     ]
     if candidates and not rebuild:
@@ -266,7 +275,7 @@ def resolve_kernel_for_day(date, drug, registry=None, lens="R3", qc_dir=None,
                                 registry=registry)
 
 
-def build_kernel_from_files(nist_intensity, nist_psd, drug, lens="R3", cal_date=None,
+def build_kernel_from_files(nist_intensity, nist_psd, drug, lens=None, cal_date=None,
                             drug_intensity=None, drug_psd=None,
                             nist_psd_type="q0", drug_psd_type="q0",
                             fit_ri=False, registry=None) -> MieKernel:
@@ -276,6 +285,7 @@ def build_kernel_from_files(nist_intensity, nist_psd, drug, lens="R3", cal_date=
     NIST → geometry (always). RI: stored library value for a known drug, or fit
     from the drug-in-antisolvent standard when ``fit_ri`` or the drug is new.
     """
+    lens = _lens_id(lens)
     registry = _external_registry_path(registry)
     cal_date = _calibration_date_string(cal_date)
     geom = fit_geometry(
@@ -298,13 +308,14 @@ def build_kernel_from_files(nist_intensity, nist_psd, drug, lens="R3", cal_date=
     return kernel
 
 
-def build_kernel_from_qc(qc_dir, drug, lens="R3", cal_date=None, fit_ri=False,
+def build_kernel_from_qc(qc_dir, drug, lens=None, cal_date=None, fit_ri=False,
                          registry=None) -> MieKernel:
     """Discover ``data_<sample>_<type>`` files in ``qc_dir`` and build a kernel.
 
     Convenience over :func:`build_kernel_from_files` for folders that follow the
     naming convention.
     """
+    lens = _lens_id(lens)
     registry = _external_registry_path(registry)
     cal_date = _calibration_date_string(cal_date)
     qc = standards.discover_qc_files(qc_dir, drug, need_drug=fit_ri or drug not in RI_LIBRARY)

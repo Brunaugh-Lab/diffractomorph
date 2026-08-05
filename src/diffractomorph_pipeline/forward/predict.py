@@ -84,6 +84,11 @@ def predict(psd, ph: float, *, dose_mg: float | None = None,
             "material-specific mw, pka_bh, and s0_uM values"
         )
 
+    if volume_mL is not None:
+        if "v_diss_mL" in overrides and float(overrides["v_diss_mL"]) != float(volume_mL):
+            raise ValueError("volume_mL and v_diss_mL must agree when both are supplied")
+        p = replace(p, v_diss_mL=float(volume_mL))
+
     if "s0_uM" not in overrides:                       # measured Cs(pH) unless overridden
         s0_ugml = _resolve_cs_s0_ugml(drug, ph) if drug is not None else None
         if s0_ugml is not None:
