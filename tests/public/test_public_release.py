@@ -221,13 +221,19 @@ def test_snapshot_builder_is_exact_and_manifest_complete(tmp_path):
 
 
 def test_unknown_material_requires_explicit_forward_parameters():
-    from diffractomorph_pipeline.forward import PSD, predict
+    from diffractomorph_pipeline.forward import Parameters, PSD, predict, predict_from_snapshot
 
     psd = PSD.from_q3([1.0, 2.0], [0.5, 0.5])
     with pytest.raises(ValueError, match="material parameters are required"):
         predict(psd, ph=6.0, dose_mg=1.0, t_end=1.0, n_eval=2)
     with pytest.raises(ValueError, match="unknown material"):
         predict(psd, ph=6.0, dose_mg=1.0, drug="compound-y", t_end=1.0, n_eval=2)
+    with pytest.raises(ValueError, match="must agree"):
+        predict_from_snapshot(
+            psd, ph=6.0, injected_mg=1.0, conc_ugml=1.0, volume_mL=20.0,
+            params=Parameters(mw=100.0, pka_bh=5.0, s0_uM=1.0, v_diss_mL=20.0),
+            v_diss_mL=40.0, t_end=1.0, n_eval=2,
+        )
 
 
 def test_kernel_build_api_requires_external_registry_and_calibration_date(tmp_path):

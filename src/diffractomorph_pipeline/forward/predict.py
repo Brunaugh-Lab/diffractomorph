@@ -148,6 +148,6 @@ def predict_from_snapshot(psd, ph: float, *, injected_mg: float, conc_ugml: floa
         raise ValueError(
             f"snapshot anchor dissolves everything: C·V = {conc_ugml}×{volume_mL}/1000 = "
             f"{dissolved_mg:.4f} mg ≥ injected {injected_mg} mg — check the dose or the UV concentration")
-    overrides.setdefault("v_diss_mL", volume_mL)       # ODE cell volume == mass-balance volume
-    return predict(psd, ph, dose_mg=still_solid_mg, c0_ugml=conc_ugml, drug=drug,
-                   params=params, morph=morph, t_end=t_end, n_eval=n_eval, **overrides)
+    return predict(psd, ph, dose_mg=still_solid_mg, volume_mL=volume_mL,
+                   c0_ugml=conc_ugml, drug=drug, params=params, morph=morph,
+                   t_end=t_end, n_eval=n_eval, **overrides)
