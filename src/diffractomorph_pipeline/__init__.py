@@ -1,4 +1,4 @@
-"""DiffractoMorph — manifest-driven multichannel dissolution analysis."""
+"""DiffractoMorph — light-scattering proxies for particle dissolution."""
 
 from .model import Run, RunProvenance
 

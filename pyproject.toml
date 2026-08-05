@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "diffractomorph-pipeline"
 dynamic = ["version"]
-description = "Manifest-driven analysis of time-resolved multichannel particle-dissolution measurements."
+description = "Multichannel light-scattering analysis as a proxy for particle dissolution."
 readme = "README.md"
 license = "MIT"
 authors = [{name = "Ashlee Brunaugh"}]

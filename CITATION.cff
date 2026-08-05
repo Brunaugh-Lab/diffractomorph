@@ -1,11 +1,13 @@
 cff-version: 1.2.0
 message: "If you use DiffractoMorph, cite this software release. The manuscript citation will be added after publication."
-title: "DiffractoMorph: manifest-driven multichannel particle-dissolution analysis"
+title: "DiffractoMorph: Multichannel Light-Scattering Analysis as a Proxy for Particle Dissolution"
 type: software
 authors:
   - family-names: Brunaugh
     given-names: Ashlee
 version: 0.1.0
+date-released: 2026-08-05
+doi: 10.5281/zenodo.21810748
 license: MIT
 repository-code: "https://github.com/Brunaugh-Lab/diffractomorph"
 keywords:

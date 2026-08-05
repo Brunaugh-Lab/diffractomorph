@@ -1,7 +1,7 @@
 # DiffractoMorph
 
-DiffractoMorph is a manifest-driven Python package for time-resolved,
-multichannel particle-dissolution measurements. It provides an instrument-neutral
+DiffractoMorph is a Python package for using time-resolved, multichannel light
+scattering as a proxy for particle dissolution. It provides an instrument-neutral
 run model, a PAQXOS RTF adapter, artifact and noise handling, aggregate KWW
 descriptors, matched-extent q3 analysis, UV assay primitives, hierarchical study
 summaries, and explicitly named forward models.
@@ -116,3 +116,9 @@ before attaching it to an issue. See [support guidance](docs/support.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
 [MIT License](LICENSE).
+
+## Citation
+
+Brunaugh, A. (2026). *DiffractoMorph: Multichannel Light-Scattering Analysis as a
+Proxy for Particle Dissolution* (v0.1.0). Zenodo.
+https://doi.org/10.5281/zenodo.21810748
