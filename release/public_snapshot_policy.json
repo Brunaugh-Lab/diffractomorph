@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "root_files": [
+    ".gitignore",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "CONTRIBUTING.md",
+    "DATA_LICENSE.md",
+    "examples/README.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "pyproject.toml",
+    "release/README.md",
+    "release/public_snapshot_policy.json",
+    "scripts/build_public_snapshot.py"
+  ],
+  "directory_roots": [
+    ".github",
+    "docs",
+    "src/diffractomorph_pipeline",
+    "tests/public"
+  ],
+  "excluded_prefixes": [
+    "src/diffractomorph_pipeline/data/assay",
+    "src/diffractomorph_pipeline/data/kernels",
+    "src/diffractomorph_pipeline/data/noise",
+    "src/diffractomorph_pipeline/data/solubility",
+    "src/diffractomorph_pipeline/data/standards",
+    "src/diffractomorph_pipeline/figures/manuscript.py",
+    "src/diffractomorph_pipeline/figures/objective1_feasibility.py",
+    "src/diffractomorph_pipeline/figures/publication.py"
+  ],
+  "allowed_data_prefixes": [
+    "src/diffractomorph_pipeline/data/examples",
+    "src/diffractomorph_pipeline/data/schema"
+  ]
+}

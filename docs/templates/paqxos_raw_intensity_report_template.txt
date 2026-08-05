@@ -1,0 +1,38 @@
+@PAR(1)
+Measurement Name: @PNAME
+Measurement Time: @MTIME
+Report Generated on: @TIME
+Optical Concentration: @C.OPT
+
+Channel, Ref Value, Measured Value
+1, @I.REF(1), @I.NORM(1)
+2, @I.REF(2), @I.NORM(2)
+3, @I.REF(3), @I.NORM(3)
+4, @I.REF(4), @I.NORM(4)
+5, @I.REF(5), @I.NORM(5)
+6, @I.REF(6), @I.NORM(6)
+7, @I.REF(7), @I.NORM(7)
+8, @I.REF(8), @I.NORM(8)
+9, @I.REF(9), @I.NORM(9)
+10, @I.REF(10), @I.NORM(10)
+11, @I.REF(11), @I.NORM(11)
+12, @I.REF(12), @I.NORM(12)
+13, @I.REF(13), @I.NORM(13)
+14, @I.REF(14), @I.NORM(14)
+15, @I.REF(15), @I.NORM(15)
+16, @I.REF(16), @I.NORM(16)
+17, @I.REF(17), @I.NORM(17)
+18, @I.REF(18), @I.NORM(18)
+19, @I.REF(19), @I.NORM(19)
+20, @I.REF(20), @I.NORM(20)
+21, @I.REF(21), @I.NORM(21)
+22, @I.REF(22), @I.NORM(22)
+23, @I.REF(23), @I.NORM(23)
+24, @I.REF(24), @I.NORM(24)
+25, @I.REF(25), @I.NORM(25)
+26, @I.REF(26), @I.NORM(26)
+27, @I.REF(27), @I.NORM(27)
+28, @I.REF(28), @I.NORM(28)
+29, @I.REF(29), @I.NORM(29)
+30, @I.REF(30), @I.NORM(30)
+31, @I.REF(31), @I.NORM(31)

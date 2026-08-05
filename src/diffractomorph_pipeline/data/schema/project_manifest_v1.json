@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diffractomorph.org/schema/project-manifest-v1.json",
+  "title": "DiffractoMorph project manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "data_root", "independent_unit", "profiles", "runs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "data_root": {"type": "string", "minLength": 1},
+    "independent_unit": {"type": "string", "minLength": 1},
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument", "material", "medium", "analysis", "noise", "optical_operator", "assay", "solubility"],
+      "properties": {
+        "instrument": {"$ref": "#/$defs/profile"},
+        "material": {"$ref": "#/$defs/profile"},
+        "medium": {"$ref": "#/$defs/profile"},
+        "analysis": {"$ref": "#/$defs/profile"},
+        "noise": {"$ref": "#/$defs/profile"},
+        "optical_operator": {"$ref": "#/$defs/profile"},
+        "assay": {"$ref": "#/$defs/profile"},
+        "solubility": {"$ref": "#/$defs/profile"}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/run"}
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "parameters": {"type": "object", "minProperties": 1},
+        "not_applicable_reason": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {"required": ["path"]},
+        {"required": ["parameters"]},
+        {"required": ["not_applicable_reason"]}
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "adapter", "kind", "sample_id"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "adapter": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["measurement", "blank", "calibration"]},
+        "sample_id": {"type": "string", "minLength": 1},
+        "independent_unit_id": {"type": "string", "minLength": 1},
+        "technical_replicate": {"type": ["string", "number"]},
+        "instrument_id": {"type": "string"},
+        "metadata": {"type": "object"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "measurement"}}, "required": ["kind"]},
+          "then": {"required": ["independent_unit_id"]}
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  public-package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python scripts/build_public_snapshot.py "${RUNNER_TEMP}/public-snapshot"
+      - run: python scripts/build_public_snapshot.py --verify-existing "${RUNNER_TEMP}/public-snapshot"
+      - run: cp -R "${RUNNER_TEMP}/public-snapshot" "${RUNNER_TEMP}/public-build"
+      - run: python -m pip wheel --no-deps --wheel-dir dist "${RUNNER_TEMP}/public-build"
+      - run: python -m pip install pytest dist/*.whl
+      - run: python -m pytest -q "${RUNNER_TEMP}/public-snapshot/tests/public"

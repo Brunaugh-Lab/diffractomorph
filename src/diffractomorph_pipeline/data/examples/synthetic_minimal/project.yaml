@@ -1,0 +1,57 @@
+schema_version: 1
+project_id: synthetic-compound-x
+data_root: .
+independent_unit: preparation
+
+profiles:
+  instrument:
+    id: synthetic-four-channel-v1
+    parameters:
+      adapter: tidy_csv
+      channel_ids: [forward, middle_1, middle_2, wide]
+  material:
+    id: compound-x-v1
+    parameters:
+      display_name: Synthetic compound X
+  medium:
+    id: aqueous-example-v1
+    parameters:
+      display_name: Example aqueous medium
+      cell_volume_ml: 10.0
+  analysis:
+    id: aggregate-kww-v1
+    parameters:
+      channel_set: all_measured
+      stored_reference_subtraction: false
+      upward_hampel:
+        half_window_frames: 3
+        threshold_mad: 4.0
+      tau_bounds_min: [0.05, 500.0]
+      beta_bounds: [0.2, 3.0]
+  noise:
+    id: synthetic-noise-not-applied
+    not_applicable_reason: Tutorial validates contracts and ingestion only.
+  optical_operator:
+    id: synthetic-operator-not-applied
+    not_applicable_reason: Detector channels are intentionally not mapped to particle size.
+  assay:
+    id: synthetic-assay-not-applied
+    not_applicable_reason: The tutorial contains no independent dissolved-mass assay.
+  solubility:
+    id: synthetic-solubility-not-applied
+    not_applicable_reason: The tutorial does not run a mass-domain dissolution model.
+
+runs:
+  - id: compound-x-prep-a-run-1
+    source: compound_x_run.csv
+    sha256: 956d3543d4c20da9dfbd0c7f4bdaa62d3cc575c33ecdf2238c2d9f03873f78c9  # pragma: allowlist secret
+    adapter: tidy_csv
+    kind: measurement
+    sample_id: compound-x
+    independent_unit_id: prep-a
+    technical_replicate: "1"
+    instrument_id: synthetic-four-channel
+    metadata:
+      condition: example-aqueous
+      started_at: 2026-01-15T09:00:00
+      note: Fully synthetic public example.
