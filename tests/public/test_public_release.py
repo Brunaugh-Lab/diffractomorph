@@ -5,7 +5,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import numpy as np
@@ -58,8 +57,8 @@ def test_public_analysis_profile_is_explicit():
 
 
 def test_unimplemented_figure_command_is_not_exported():
-    metadata = tomllib.loads((Path(__file__).resolve().parents[2] / "pyproject.toml").read_text())
-    assert "dfm-figure" not in metadata["project"]["scripts"]
+    metadata = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    assert "dfm-figure" not in metadata
 
 
 def test_public_urls_never_reuse_private_repository_slug():
