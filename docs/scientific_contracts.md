@@ -82,3 +82,9 @@ Forward engines are selected by immutable IDs:
 
 `forward.run_named_model` returns the selected model specification with the
 numerical result so the domain and allowed inference remain attached.
+
+The convenience `forward.predict` interface does not select a material implicitly.
+Generic callers pass an explicit `Parameters` object; the optional legacy CFZ profile is
+selected only by writing `drug="CFZ"`. Snapshot-anchored predictions additionally require the
+dissolution volume. Optical-kernel construction requires explicit material, lens, calibration
+date, and external registry arguments.

@@ -35,8 +35,9 @@ hashes, and artifact checksum. Detector channels are angular measurements, not s
 One broad standard can support a feasibility or geometry check without establishing unique
 diameter-to-channel localization.
 
-`dfm-build-kernel` requires an explicit external registry and a `YYYY-MM-DD` calibration
-date. The installed package is not a writable calibration store.
+`dfm-build-kernel` requires explicit material, lens, external registry, and `YYYY-MM-DD`
+calibration-date arguments. The installed package is not a writable calibration store.
+`dfm-noise-surface` likewise requires an explicit writable output path.
 
 ## Assay calibration
 

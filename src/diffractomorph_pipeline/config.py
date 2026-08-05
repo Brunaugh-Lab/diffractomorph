@@ -7,8 +7,12 @@ the existing manuscript scripts until they migrate to a frozen study manifest.
 from __future__ import annotations
 
 import os
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from diffractomorph_pipeline.study.manifest import ProjectManifest, load_manifest
 

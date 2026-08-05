@@ -12,11 +12,12 @@ Thank you for improving DiffractoMorph.
 
    ```bash
    python -m pytest -q tests/public
-   python -m pytest -q -m "core and not real_corpus"
    python -m pip wheel --no-deps .
    ```
 
-See `docs/testing.md` for public, core, manuscript, and optional real-corpus tiers.
+The clean public repository ships the public test tier. Maintainers working in the restricted
+development repository also run the core, manuscript, and optional real-corpus tiers described in
+`docs/testing.md`.
 
 By contributing, you agree that your code contribution is licensed under the MIT License.
 Do not contribute third-party data unless its redistribution terms are documented.

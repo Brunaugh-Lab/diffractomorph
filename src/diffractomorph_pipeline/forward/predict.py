@@ -7,7 +7,8 @@ Reads the suspension's q3 from a Sympatec export, uses an explicit parameter set
 
     from diffractomorph_pipeline.forward import predict
     run = predict(psd="…/CFZ QC Q0 20260609/", ph=4.5, dose_mg=0.17, drug="CFZ")
-    run = predict(psd=my_PSD, ph=4.5, conc_ugml=4.4, volume_mL=40, s0_uM=0.35)
+    run = predict(psd=my_PSD, ph=4.5, conc_ugml=4.4, volume_mL=40,
+                  params=my_material_parameters)
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ def _resolve_cs_s0_ugml(drug: str, ph: float):
 
 def predict(psd, ph: float, *, dose_mg: float | None = None,
             conc_ugml: float | None = None, volume_mL: float | None = None,
-            drug: str = "CFZ", params: Parameters | None = None,
+            drug: str | None = None, params: Parameters | None = None,
             morph: MorphologyParams | None = None,
             t_end: float = 1800.0, n_eval: int = 181, c0_ugml: float = 0.0,
             **overrides) -> DissolutionRun:
@@ -48,7 +49,8 @@ def predict(psd, ph: float, *, dose_mg: float | None = None,
     dose_mg
         Dosed mass; or give ``conc_ugml`` + ``volume_mL`` (dose = conc·vol).
     drug
-        Sets MW/pKa′ and the Cs(pH) source (CFZ → packaged solubility artifact).
+        Explicit legacy material identifier. ``drug="CFZ"`` selects the optional CFZ
+        profile. Generic callers instead pass a complete ``params`` object.
     params
         Base :class:`Parameters` (defaults used if omitted).
     morph
@@ -66,8 +68,14 @@ def predict(psd, ph: float, *, dose_mg: float | None = None,
             raise ValueError("give dose_mg, or both conc_ugml and volume_mL")
         dose_mg = conc_ugml * volume_mL / 1000.0
 
+    if params is None and drug is None:
+        raise ValueError(
+            "material parameters are required; pass an explicit Parameters object or "
+            "select the optional legacy profile with drug='CFZ'"
+        )
+
     p = params or Parameters()
-    d = _DRUGS.get(drug.upper())
+    d = _DRUGS.get(drug.upper()) if drug is not None else None
     if d:
         p = replace(p, mw=d["mw"], pka_bh=d["pka_bh"])
     elif params is None:
@@ -77,10 +85,10 @@ def predict(psd, ph: float, *, dose_mg: float | None = None,
         )
 
     if "s0_uM" not in overrides:                       # measured Cs(pH) unless overridden
-        s0_ugml = _resolve_cs_s0_ugml(drug, ph)
+        s0_ugml = _resolve_cs_s0_ugml(drug, ph) if drug is not None else None
         if s0_ugml is not None:
             p = p.with_s0_ugml(s0_ugml)
-        elif drug.upper() == "CFZ":
+        elif drug is not None and drug.upper() == "CFZ":
             raise FileNotFoundError(
                 "the optional CFZ solubility artifact is not installed; pass s0_uM explicitly"
             )
@@ -95,7 +103,7 @@ def predict(psd, ph: float, *, dose_mg: float | None = None,
 
 
 def predict_from_snapshot(psd, ph: float, *, injected_mg: float, conc_ugml: float,
-                          volume_mL: float = 40.0, drug: str = "CFZ",
+                          volume_mL: float, drug: str | None = None,
                           params: Parameters | None = None, morph: MorphologyParams | None = None,
                           t_end: float = 1800.0, n_eval: int = 181, **overrides) -> DissolutionRun:
     """Predict a run **from the first grounded UV+LD snapshot** instead of from injection.

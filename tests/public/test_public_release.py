@@ -56,6 +56,12 @@ def test_public_analysis_profile_is_explicit():
     assert config.reference_mode == "raw_measured"
 
 
+def test_python_310_public_config_entrypoint_imports():
+    from diffractomorph_pipeline.config import load_project
+
+    assert load_project(bundled_example_manifest()).project_id == "synthetic-compound-x"
+
+
 def test_unimplemented_figure_command_is_not_exported():
     metadata = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
     assert "dfm-figure" not in metadata
@@ -94,6 +100,17 @@ def test_commands_do_not_claim_withheld_qc_defaults():
     with pytest.raises(SystemExit) as missing_kernel_inputs:
         cli.build_kernel_main([])
     assert missing_kernel_inputs.value.code == 2
+
+    with pytest.raises(SystemExit) as implicit_kernel_identity:
+        cli.build_kernel_main([
+            "--cal-date", "2026-08-04", "--registry", "registry.yaml",
+            "--nist-intensity", "nist.rtf", "--nist-psd", "nist.csv",
+        ])
+    assert implicit_kernel_identity.value.code == 2
+
+    with pytest.raises(SystemExit) as implicit_noise_output:
+        cli.noise_surface_main(["calibration.rtf"])
+    assert implicit_noise_output.value.code == 2
 
     with pytest.raises(SystemExit) as missing_qc_reference:
         cli.qc_main(["measurement.rtf"])
@@ -207,6 +224,8 @@ def test_unknown_material_requires_explicit_forward_parameters():
     from diffractomorph_pipeline.forward import PSD, predict
 
     psd = PSD.from_q3([1.0, 2.0], [0.5, 0.5])
+    with pytest.raises(ValueError, match="material parameters are required"):
+        predict(psd, ph=6.0, dose_mg=1.0, t_end=1.0, n_eval=2)
     with pytest.raises(ValueError, match="unknown material"):
         predict(psd, ph=6.0, dose_mg=1.0, drug="compound-y", t_end=1.0, n_eval=2)
 

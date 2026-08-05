@@ -48,5 +48,6 @@ UV-derived dissolved mass is independent evidence. q3 is model-inverted relative
 composition from the same optical acquisition. Detector channels are angular measurements,
 and preparation—not the number of technical cuvette runs—is the replicated unit.
 
-See `release/manuscript-availability-template.md` and
-`release/archive-manifest-template.json` for the remaining release placeholders.
+The restricted development repository maintains availability-language and archive-manifest
+templates. They are not shipped in the generic code snapshot because their identifiers, rights,
+and checksums remain unresolved. Reviewed copies will accompany the versioned data archive.

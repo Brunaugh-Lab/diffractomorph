@@ -6,7 +6,7 @@ grid at each frame, so every snapshot shares one size axis — the Sympatec q3 v
 watch the distribution shift to smaller sizes across time.
 
     from diffractomorph_pipeline.forward import predict, q3_evolution
-    run = predict(psd, ph=4.5, dose_mg=0.2, t_end=1200, n_eval=101)   # 20 min, every 12 s
+    run = predict(psd, ph=4.5, dose_mg=0.2, drug="CFZ", t_end=1200, n_eval=101)
     q3 = q3_evolution(run)          # tidy [time_s, time_min, size_um, q3_pct]
 """
 from __future__ import annotations

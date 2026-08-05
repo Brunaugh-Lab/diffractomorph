@@ -32,6 +32,7 @@ dependencies = [
     "miepython>=2.5",
     "pyyaml>=6.0",
     "pdfplumber>=0.10",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]

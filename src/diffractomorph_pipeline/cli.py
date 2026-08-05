@@ -368,22 +368,21 @@ def noise_surface_main(argv=None):
     fits the per-channel σ(signal, Copt) surface, and saves the artifact. Fouled
     runs (elevated reference background) are auto-excluded.
     """
-    from importlib import resources
-    from diffractomorph_pipeline.noise_surface import build_noise_surface, _surface_path
+    from diffractomorph_pipeline.noise_surface import build_noise_surface
 
     parser = argparse.ArgumentParser(
         description="Build the per-channel CFZ-pH-7 noise surface (super-floor calibration).",
     )
     parser.add_argument("inputs", type=Path, nargs="+", help="CFZ-pH-7 titration RTF(s) or folder(s).")
-    parser.add_argument("-o", "--output", type=Path, default=None,
-                        help="Surface JSON path (default: packaged data/noise/cfz_ph7_surface.json).")
+    parser.add_argument("-o", "--output", type=Path, required=True,
+                        help="Explicit writable output path for the surface JSON.")
     parser.add_argument("--include-fouled", action="store_true")
     args = parser.parse_args(argv)
 
     files = _collect_rtfs(args.inputs)
     runs = [(Path(f).stem, ingest.extract_run(f, run_kind="measurement")) for f in files]
     surface = build_noise_surface(runs, exclude_fouled=not args.include_fouled)
-    out = args.output or _surface_path()
+    out = args.output
     surface.save(out)
     m = surface.meta
     print(f"surface: σ = {surface.k:.4g}·S^{surface.p:+.2f}   ρ={surface.rho:+.2f} "
@@ -411,8 +410,10 @@ def build_kernel_main(argv=None):
     )
     parser.add_argument("--qc-dir", type=Path, default=None,
                         help="Folder of explicit data_<sample>_<type> QC files.")
-    parser.add_argument("--drug", default="CFZ")
-    parser.add_argument("--lens", default="R3")
+    parser.add_argument("--drug", required=True,
+                        help="Explicit material identifier; no material is selected by default.")
+    parser.add_argument("--lens", required=True, choices=sorted(mb.LENS_THETA_MIN_DEG),
+                        help="Instrument lens identifier; no detector geometry is selected by default.")
     parser.add_argument("--cal-date", required=True,
                         help="NIST QC date (YYYY-MM-DD) this geometry comes from.")
     parser.add_argument("--fit-ri", action="store_true",
