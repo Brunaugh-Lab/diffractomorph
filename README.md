@@ -119,6 +119,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
 
 ## Citation
 
-Brunaugh, A. (2026). *DiffractoMorph: Multichannel Light-Scattering Analysis as a
-Proxy for Particle Dissolution* (v0.1.0). Zenodo.
+Brunaugh, A., & Al-Gousous, J. (2026). *DiffractoMorph: Multichannel
+Light-Scattering Analysis as a Proxy for Particle Dissolution* (v0.1.0). Zenodo.
 https://doi.org/10.5281/zenodo.21810748

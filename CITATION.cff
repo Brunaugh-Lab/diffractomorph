@@ -5,6 +5,8 @@ type: software
 authors:
   - family-names: Brunaugh
     given-names: Ashlee
+  - family-names: Al-Gousous
+    given-names: Jozef
 version: 0.1.0
 date-released: 2026-08-05
 doi: 10.5281/zenodo.21810748
