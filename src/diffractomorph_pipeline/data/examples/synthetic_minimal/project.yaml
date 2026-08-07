@@ -23,6 +23,8 @@ profiles:
     parameters:
       channel_set: all_measured
       stored_reference_subtraction: false
+      start_boundary:
+        policy: first_frame
       upward_hampel:
         half_window_frames: 3
         threshold_mad: 4.0
