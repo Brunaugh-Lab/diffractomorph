@@ -168,18 +168,30 @@ def aggregate_kww_main(argv=None):
     project = load_manifest(args.manifest)
     analysis_profile = project.require_profile("analysis")
     required_analysis = {
-        "channel_set", "stored_reference_subtraction", "upward_hampel",
+        "channel_set", "stored_reference_subtraction", "start_boundary", "upward_hampel",
         "tau_bounds_min", "beta_bounds",
     }
     missing_analysis = sorted(required_analysis - set(analysis_profile.parameters))
     if missing_analysis:
         parser.error("analysis profile missing: " + ", ".join(missing_analysis))
-    config = AggregateKWWConfig.from_profile(analysis_profile.parameters)
+    try:
+        config = AggregateKWWConfig.from_profile(analysis_profile.parameters)
+    except ValueError as exc:
+        parser.error(str(exc))
     artifact_parameters = analysis_profile.parameters.get("artifact_correction")
     artifact_config = (
         ArtifactCorrectionConfig.from_profile(artifact_parameters)
         if artifact_parameters is not None else None
     )
+    if (
+        config.start_policy != "first_frame"
+        and artifact_config is not None
+        and args.artifact_correction != "off"
+    ):
+        parser.error(
+            "concordant acquisition-start selection and artifact_correction are "
+            "alternative startup treatments; rerun with --artifact-correction off"
+        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for spec in project.runs:
@@ -203,7 +215,10 @@ def aggregate_kww_main(argv=None):
             run = corrected.run
             corrected.ledger.to_csv(args.output_dir / f"{spec.run_id}_frame_ledger.csv", index=False)
             correction_status = "applied"
-        result = fit_aggregate_kww(run, config)
+        try:
+            result = fit_aggregate_kww(run, config)
+        except KeyError as exc:
+            parser.error(f"run {spec.run_id!r}: {exc}")
         condition = spec.metadata.get("condition")
         if condition is None:
             parser.error(f"measurement run {spec.run_id!r} metadata requires condition")
@@ -215,11 +230,38 @@ def aggregate_kww_main(argv=None):
     by_run = pd.DataFrame(rows)
     values = ("tau_min", "beta", "mean_relax_min", "t50_min", "optical_decay_depth_pct", "i0_fit")
     summary = summarize_hierarchy(by_run, value_columns=values)
+    unit_start_counts = (
+        by_run.assign(_started_late=by_run["start_index"].gt(0).astype(int))
+        .groupby(["condition", "independent_unit_id"], as_index=False)
+        .agg(n_runs_started_late=("_started_late", "sum"))
+    )
+    independent_units = summary.independent_units.merge(
+        unit_start_counts,
+        on=["condition", "independent_unit_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    condition_start_counts = (
+        unit_start_counts.assign(
+            _unit_started_late=unit_start_counts["n_runs_started_late"].gt(0).astype(int),
+        )
+        .groupby("condition", as_index=False)
+        .agg(
+            n_runs_started_late=("n_runs_started_late", "sum"),
+            n_independent_units_started_late=("_unit_started_late", "sum"),
+        )
+    )
+    conditions = summary.conditions.merge(
+        condition_start_counts,
+        on="condition",
+        how="left",
+        validate="one_to_one",
+    )
     by_run.to_csv(args.output_dir / "aggregate_kww_by_run.csv", index=False)
-    summary.independent_units.to_csv(
+    independent_units.to_csv(
         args.output_dir / "aggregate_kww_by_independent_unit.csv", index=False,
     )
-    summary.conditions.to_csv(args.output_dir / "aggregate_kww_by_condition.csv", index=False)
+    conditions.to_csv(args.output_dir / "aggregate_kww_by_condition.csv", index=False)
     print(
         f"runs={len(by_run)} independent_units={summary.independent_units['independent_unit_id'].nunique()} "
         f"conditions={len(summary.conditions)} reference_mode={config.reference_mode}"

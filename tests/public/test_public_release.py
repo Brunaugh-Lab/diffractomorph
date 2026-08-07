@@ -8,11 +8,16 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
+import yaml
 
 import diffractomorph_pipeline as dfm
 from diffractomorph_pipeline.assay import AssayCalibration
-from diffractomorph_pipeline.processing import AggregateKWWConfig
+from diffractomorph_pipeline.model import Run, RunProvenance
+from diffractomorph_pipeline.processing import (
+    AggregateKWWConfig, fit_aggregate_kww, select_aggregate_start,
+)
 from diffractomorph_pipeline.study import bundled_example_manifest, load_manifest
 
 
@@ -54,6 +59,167 @@ def test_public_analysis_profile_is_explicit():
     config = AggregateKWWConfig.from_profile(project.require_profile("analysis").parameters)
     assert config.channel_ids is None
     assert config.reference_mode == "raw_measured"
+    assert config.start_policy == "first_frame"
+
+
+def _synthetic_run(signal, copt, time_min=None):
+    signal = np.asarray(signal, dtype=float)
+    if time_min is None:
+        time_min = np.arange(signal.shape[0], dtype=float)
+    return Run(
+        signal=signal,
+        channel_ids=tuple(f"ch{index + 1}" for index in range(signal.shape[1])),
+        time_min=np.asarray(time_min, dtype=float),
+        acquisition={"copt": np.asarray(copt, dtype=float)},
+        provenance=RunProvenance(
+            run_id="synthetic-start-test", source_path="synthetic.csv",
+            adapter="tidy_csv", sample_id="compound-x",
+        ),
+        run_kind="measurement",
+    )
+
+
+def test_concordant_early_maximum_selects_and_rezeros_shape_preserving_rise():
+    pattern = np.array([4.0, 3.0, 2.0, 1.0])
+    scales = np.array([1.0, 1.5, 1.35, 1.0, 0.7, 0.5, 0.4])
+    run = _synthetic_run(scales[:, None] * pattern, [1.0, 1.45, 1.3, 1.0, 0.8, 0.6, 0.5])
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_search_frames=3,
+        start_maximum_time_min=2.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    result = fit_aggregate_kww(run, config)
+    assert result.start_index == 1
+    assert result.start_reason == "concordant_early_maximum"
+    assert result.time_min[0] == 0.0
+    assert result.selected_elapsed_time_min == 1.0
+
+
+def test_concordant_early_maximum_rejects_shape_changing_rise():
+    run = _synthetic_run(
+        [[4, 3, 2, 1], [1, 2, 3, 8], [3, 2, 1.5, 0.8], [2, 1.5, 1, 0.5],
+         [1.5, 1, 0.8, 0.4], [1.0, 0.8, 0.6, 0.3], [0.8, 0.6, 0.4, 0.2]],
+        [1.0, 1.5, 1.3, 1.0, 0.8, 0.6, 0.5],
+    )
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_search_frames=3,
+        start_maximum_time_min=2.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    aggregate = run.signal.sum(axis=1)
+    index, reason = select_aggregate_start(run, aggregate, run.channel_ids, config)
+    assert index == 0
+    assert reason == "early_maximum_changed_angular_pattern"
+
+
+def test_first_frame_policy_preserves_released_start_behavior():
+    pattern = np.array([4.0, 3.0, 2.0, 1.0])
+    scales = np.array([1.0, 1.5, 1.35, 1.0, 0.7, 0.5, 0.4])
+    run = _synthetic_run(scales[:, None] * pattern, scales)
+    result = fit_aggregate_kww(run, AggregateKWWConfig(start_policy="first_frame"))
+    assert result.start_index == 0
+    assert result.selected_elapsed_time_min == 0.0
+    assert result.start_reason == "first_frame"
+
+
+def test_concordant_start_requires_declared_acquisition_variable():
+    run = _synthetic_run([[4, 3], [6, 4.5], [5, 4]], [1.0, 1.5, 1.3])
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_acquisition_variable="transmission",
+        start_maximum_time_min=2.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    with pytest.raises(KeyError, match="transmission"):
+        fit_aggregate_kww(run, config)
+
+
+def test_concordant_start_rejects_nonfinite_early_acquisition():
+    run = _synthetic_run([[4, 3], [6, 4.5], [5, 4]], [1.0, np.nan, 1.3])
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_maximum_time_min=2.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    aggregate = run.signal.sum(axis=1)
+    index, reason = select_aggregate_start(run, aggregate, run.channel_ids, config)
+    assert index == 0
+    assert reason == "nonfinite_early_start_variable"
+
+
+def test_concordant_start_profile_requires_complete_explicit_contract():
+    project = load_manifest(bundled_example_manifest())
+    parameters = dict(project.require_profile("analysis").parameters)
+    parameters["start_boundary"] = {
+        "policy": "concordant_early_maximum",
+        "acquisition_variable": "copt",
+        "search_frames": 3,
+        "maximum_time_min": 1.0,
+        "minimum_relative_increase": 0.2,
+        "minimum_spectral_cosine": 0.995,
+    }
+    config = AggregateKWWConfig.from_profile(parameters)
+    assert config.start_policy == "concordant_early_maximum"
+    assert config.start_maximum_time_min == 1.0
+    assert config.start_minimum_relative_increase == 0.2
+    assert config.start_minimum_spectral_cosine == 0.995
+
+    incomplete = dict(parameters)
+    incomplete["start_boundary"] = dict(parameters["start_boundary"])
+    incomplete["start_boundary"].pop("maximum_time_min")
+    with pytest.raises(ValueError, match="maximum_time_min"):
+        AggregateKWWConfig.from_profile(incomplete)
+
+    missing_boundary = dict(parameters)
+    missing_boundary.pop("start_boundary")
+    with pytest.raises(ValueError, match="start_boundary"):
+        AggregateKWWConfig.from_profile(missing_boundary)
+
+    invalid = dict(parameters)
+    invalid["start_boundary"] = dict(parameters["start_boundary"])
+    invalid["start_boundary"]["maximum_time_min"] = -1
+    with pytest.raises(ValueError, match="nonnegative"):
+        AggregateKWWConfig.from_profile(invalid)
+
+
+def test_concordant_start_rejects_candidate_after_startup_interval():
+    pattern = np.array([4.0, 3.0, 2.0, 1.0])
+    scales = np.array([1.0, 1.5, 1.3])
+    run = _synthetic_run(
+        scales[:, None] * pattern,
+        [1.0, 1.5, 1.3],
+        time_min=[0.0, 1.2, 1.4],
+    )
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_search_frames=3,
+        start_maximum_time_min=1.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    aggregate = run.signal.sum(axis=1)
+    index, reason = select_aggregate_start(run, aggregate, run.channel_ids, config)
+    assert index == 0
+    assert reason == "early_maximum_after_startup_interval"
+
+
+def test_start_selection_rejects_misaligned_aggregate():
+    run = _synthetic_run([[4, 3], [6, 4.5], [5, 4]], [1.0, 1.5, 1.3])
+    config = AggregateKWWConfig(
+        start_policy="concordant_early_maximum",
+        start_search_frames=3,
+        start_maximum_time_min=1.0,
+        start_minimum_relative_increase=0.2,
+        start_minimum_spectral_cosine=0.995,
+    )
+    with pytest.raises(ValueError, match="one value per run frame"):
+        select_aggregate_start(run, np.array([7.0, 10.5]), run.channel_ids, config)
 
 
 def test_python_310_public_config_entrypoint_imports():
@@ -115,6 +281,83 @@ def test_commands_do_not_claim_withheld_qc_defaults():
     with pytest.raises(SystemExit) as missing_qc_reference:
         cli.qc_main(["measurement.rtf"])
     assert missing_qc_reference.value.code == 2
+
+
+def test_aggregate_cli_writes_start_provenance_and_summary_counts(tmp_path):
+    from diffractomorph_pipeline import cli
+
+    output = tmp_path / "aggregate"
+    cli.aggregate_kww_main([
+        str(bundled_example_manifest()), "--output-dir", str(output),
+        "--artifact-correction", "off",
+    ])
+    by_run = pd.read_csv(output / "aggregate_kww_by_run.csv")
+    by_unit = pd.read_csv(output / "aggregate_kww_by_independent_unit.csv")
+    by_condition = pd.read_csv(output / "aggregate_kww_by_condition.csv")
+    assert {
+        "start_policy", "start_index", "selected_elapsed_time_min", "start_reason",
+    }.issubset(by_run.columns)
+    assert by_run.loc[0, "start_index"] == 0
+    assert by_unit.loc[0, "n_runs_started_late"] == 0
+    assert by_condition.loc[0, "n_runs_started_late"] == 0
+    assert by_condition.loc[0, "n_independent_units_started_late"] == 0
+
+
+def test_aggregate_cli_rejects_two_startup_treatments(tmp_path):
+    from diffractomorph_pipeline import cli
+
+    source_manifest = bundled_example_manifest()
+    payload = yaml.safe_load(source_manifest.read_text())
+    payload["data_root"] = str(source_manifest.parent)
+    analysis = payload["profiles"]["analysis"]["parameters"]
+    analysis["start_boundary"] = {
+        "policy": "concordant_early_maximum",
+        "acquisition_variable": "copt",
+        "search_frames": 3,
+        "maximum_time_min": 1.0,
+        "minimum_relative_increase": 0.2,
+        "minimum_spectral_cosine": 0.995,
+    }
+    analysis["artifact_correction"] = {
+        "acquisition_variable": "copt",
+        "synchronized_intensity_z": 4.0,
+        "synchronized_acquisition_z": 1.5,
+        "synchronized_half_window": 2,
+        "isolated_spike_mad": 5.0,
+        "gap_threshold_min": 2.0,
+    }
+    manifest = tmp_path / "two-startup-treatments.yaml"
+    manifest.write_text(yaml.safe_dump(payload, sort_keys=False))
+    with pytest.raises(SystemExit) as stopped:
+        cli.aggregate_kww_main([
+            str(manifest), "--output-dir", str(tmp_path / "output"),
+        ])
+    assert stopped.value.code == 2
+
+
+def test_aggregate_cli_reports_missing_start_acquisition_cleanly(tmp_path):
+    from diffractomorph_pipeline import cli
+
+    source_manifest = bundled_example_manifest()
+    payload = yaml.safe_load(source_manifest.read_text())
+    payload["data_root"] = str(source_manifest.parent)
+    start = payload["profiles"]["analysis"]["parameters"]["start_boundary"]
+    start.update({
+        "policy": "concordant_early_maximum",
+        "acquisition_variable": "transmission",
+        "search_frames": 3,
+        "maximum_time_min": 1.0,
+        "minimum_relative_increase": 0.2,
+        "minimum_spectral_cosine": 0.995,
+    })
+    manifest = tmp_path / "missing-start-acquisition.yaml"
+    manifest.write_text(yaml.safe_dump(payload, sort_keys=False))
+    with pytest.raises(SystemExit) as stopped:
+        cli.aggregate_kww_main([
+            str(manifest), "--output-dir", str(tmp_path / "output"),
+            "--artifact-correction", "off",
+        ])
+    assert stopped.value.code == 2
 
 
 def test_diagnostic_bundle_excludes_paths_and_research_values(tmp_path):

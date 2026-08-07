@@ -1,8 +1,8 @@
 """Scattering-intensity dissolution kinetics — total angular signal ΣI(t) → KWW fit + shape-robust rate.
 
 The **overall scattering intensity** workflow (the LD dissolution readout the project settled on): sum
-the ring-channel intensities into one signal ``ΣI(t)`` (total angular scattering, ∝ particle area), clean
-upward optical glitches (bubbles), and fit the free-amplitude KWW / stretched exponential that a
+the ring-channel intensities into one signal ``ΣI(t)`` (total angular scattering, ∝ particle area), screen
+brief upward acquisition excursions, and fit the free-amplitude KWW / stretched exponential that a
 polydisperse population's superposed single-particle decays produce (see :mod:`empirical_fit`).
 
 The **meaningful readouts** (per the optics analysis — the ΣI β is a scattering-weighted, uniformity-
@@ -11,7 +11,7 @@ flattered number, and raw τ is coupled to β):
 - ``mean_relax_min`` = ``⟨t⟩ = (τ/β)·Γ(1/β)`` — the β-decoupled "how fast" timescale (or ``t50``),
 - ``beta`` — decay **heterogeneity** (β→1 uniform/single-exponential; β<1 a spread of dissolution times),
 - ``depth`` — extent of the decay,
-- ``i0`` — back-extrapolated t=0 signal (recovers the start before the ~30 s injection→first-frame delay).
+- ``i0`` — fitted signal at the analysis time origin.
 
 Compare rates across conditions with ``⟨t⟩`` / ``t50``, **not** raw ``τ``.
 
@@ -39,9 +39,8 @@ def despike_upward(t_min, y, *, z=4.0, half=3, return_mask=False):
     """Remove UPWARD glitch spikes from a monotone-ish decaying LD signal (``Copt`` or the total
     angular ``ΣI``), on the full absolute time grid.
 
-    Bubbles / obscuration hits raise the signal above the local trend, but dissolution only *lowers*
-    the undissolved material — so an upward excursion is never real. A Hampel filter (rolling-median
-    baseline over ``±half`` frames, robust MAD, **upward tail only**), flagged frames interpolated from
+    A Hampel filter identifies brief upward excursions from a locally decreasing trajectory
+    (rolling-median baseline over ``±half`` frames, robust MAD, **upward tail only**). Flagged frames are interpolated from
     their good neighbours so time stays aligned with UV. A flagged point must also be **locally rising**
     (a contiguous above-trend run must *contain* a rising frame): the steep monotone *start* of a fast
     run sits above the local median without being a spike, and the rising-edge guard keeps that leading

@@ -7,7 +7,14 @@ quantities, and forward predictions. These categories are not interchangeable.
 
 `processing.fit_aggregate_kww` is the manuscript-authoritative particle-side
 endpoint. It sums the explicitly selected measured detector channels, applies
-the one-sided upward Hampel repair, and fits a free-amplitude KWW curve. The
+an explicitly declared acquisition-start policy, applies the one-sided upward
+Hampel repair, and fits a free-amplitude KWW curve. The released behavior uses
+`start_boundary.policy: first_frame`. The optional
+`concordant_early_maximum` policy requires a declared acquisition variable,
+early search window, maximum startup interval, minimum concordant increase, and
+angular-pattern cosine threshold; its selected original frame, elapsed time, and reason
+are written with each run-level result, and elapsed time is re-zeroed at the
+selected frame. The
 default profile selects every measured channel and retains the stored reference
 in the signal. A reference-adjusted fit is available only through the explicit
 `reference_mode="reference_adjusted"` sensitivity setting.
@@ -22,12 +29,30 @@ weight independent units equally. Overall and per-endpoint contributing run and
 independent-unit counts are stored separately so missing values cannot inflate the
 reported replication for an endpoint.
 
+An explicit optional start profile has this form:
+
+```yaml
+start_boundary:
+  policy: concordant_early_maximum
+  acquisition_variable: copt
+  search_frames: 3
+  maximum_time_min: 1.0
+  minimum_relative_increase: 0.20
+  minimum_spectral_cosine: 0.995
+```
+
+These values define an analysis profile; they are not universal instrument
+defaults. The concordant start policy and `processing.correct_artifacts` are
+alternative startup treatments. The aggregate CLI therefore requires
+`--artifact-correction off` when a manifest declares both.
+
 ## Artifact processing
 
 `processing.correct_artifacts` requires a named Copt-like acquisition variable.
 It records startup removal, synchronized interpolation, isolated-channel median
 replacement, and gap re-zeroing in a frame-level ledger. The separate aggregate
-Hampel repair remains separate in both code and provenance.
+Hampel repair remains separate from acquisition-start selection in both code
+and provenance.
 
 ## Matched-extent q3
 
