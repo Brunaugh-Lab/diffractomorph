@@ -212,16 +212,26 @@ class ProjectManifest:
             )
         return run
 
+    def _read_spec(self, spec: RunSpec) -> Run:
+        reader = get_reader(spec.adapter)
+        instrument = self.require_profile("instrument")
+        profile_aware_read = getattr(reader, "read_with_instrument_profile", None)
+        if profile_aware_read is not None:
+            run = profile_aware_read(spec, instrument.parameters)
+        else:
+            run = reader.read(spec)
+        return self._validate_loaded_run(spec, run)
+
     def read_run(self, run_id: str) -> Run:
         """Read one run through the adapter explicitly declared in the manifest."""
         matches = [spec for spec in self.runs if spec.run_id == run_id]
         if not matches:
             raise KeyError(f"unknown run_id {run_id!r}")
         spec = matches[0]
-        return self._validate_loaded_run(spec, get_reader(spec.adapter).read(spec))
+        return self._read_spec(spec)
 
     def read_all_runs(self) -> tuple[Run, ...]:
-        return tuple(self._validate_loaded_run(spec, get_reader(spec.adapter).read(spec)) for spec in self.runs)
+        return tuple(self._read_spec(spec) for spec in self.runs)
 
 
 def bundled_example_manifest() -> Path:

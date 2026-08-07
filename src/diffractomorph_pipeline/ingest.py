@@ -14,8 +14,8 @@ Three instrument quirks the parser respects (spec §2):
 1. **Two intensity columns per channel** — ``Ref Value`` and ``Measured Value``.
    ``Measured`` is the per-frame signal; ``Ref`` is the stored reference spectrum.
    Both are captured (``Ref`` feeds optional static-baseline subtraction).
-2. **``Ref`` is static within a file** — validated; a varying ``Ref`` flags a
-   malformed/concatenated export.
+2. **``Ref`` is expected to be static within a file** — variation is retained
+   and flagged for review rather than silently changing frame eligibility.
 3. **Frames are listed newest-first** — the parser sorts by timestamp ascending
    and records ``reverse_order_detected``; document order is never trusted.
 
@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import re
 import warnings
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
@@ -66,14 +68,17 @@ def _parse_frames(text: str) -> list[dict]:
             if cur is not None and cur["channels"]:
                 frames.append(cur)
             cur = {"name": pending_name, "time": line.split(":", 1)[1].strip(),
-                   "copt": float("nan"), "channels": {}}
+                   "copt": float("nan"), "channels": {}, "duplicate_channels": set()}
         elif line.startswith("Optical Concentration:") and cur is not None:
             m = re.search(rf"({_NUM})", line.split(":", 1)[1])
             cur["copt"] = float(m.group(1)) if m else float("nan")
         elif cur is not None:
             m = _CHANNEL_ROW.match(line)
             if m:
-                cur["channels"][int(m.group(1))] = (float(m.group(2)), float(m.group(3)))
+                channel = int(m.group(1))
+                if channel in cur["channels"]:
+                    cur["duplicate_channels"].add(channel)
+                cur["channels"][channel] = (float(m.group(2)), float(m.group(3)))
     if cur is not None and cur["channels"]:
         frames.append(cur)
     return frames
@@ -86,6 +91,7 @@ def extract_run(
     run_kind: str | None = None,
     ref_static_tol: float = 1e-6,
     emit_csv: bool = False,
+    expected_channel_ids: Sequence[int | str] | None = None,
 ) -> RawRun:
     """Parse one PAQXOS RTF into a :class:`RawRun` (spec §4).
 
@@ -99,6 +105,11 @@ def extract_run(
         Max per-channel std of ``ref`` across frames for the static check.
     emit_csv
         If true, also write the CSV mirror + meta sidecar next to the source.
+    expected_channel_ids
+        Detector-channel identifiers declared by the instrument profile. When
+        supplied, output columns follow this declared order. When omitted, the
+        parser infers the unique most frequently observed exact channel set and
+        fails closed if equally supported sets are ambiguous.
     """
     from striprtf.striprtf import rtf_to_text
 
@@ -106,23 +117,66 @@ def extract_run(
     text = rtf_to_text(path.read_text())
     frames = _parse_frames(text)
 
-    # Canonical channel set = the channel list of the most complete frame.
     if not frames:
         raise ValueError(f"No frames parsed from {path}")
-    canonical = sorted(max(frames, key=lambda fr: len(fr["channels"]))["channels"].keys())
-    n_ch = len(canonical)
 
-    # Drop malformed frames (wrong channel count); fail only if <2 remain (§8).
-    good = [fr for fr in frames if sorted(fr["channels"].keys()) == canonical]
-    dropped = len(frames) - len(good)
-    if len(good) < 2 and len(frames) >= 2:
-        # too many dropped to trust — but a genuine single-frame file is allowed below
-        good = [fr for fr in frames if len(fr["channels"]) == n_ch] or good
-    if len(good) < 1:
-        raise ValueError(f"{path}: no valid frames after channel-count filtering")
+    for frame in frames:
+        try:
+            frame["parsed_time"] = datetime.strptime(frame["time"], _TIME_FMT)
+        except ValueError:
+            frame["parsed_time"] = None
+
+    if expected_channel_ids is not None:
+        try:
+            canonical = [int(str(channel)) for channel in expected_channel_ids]
+        except ValueError as exc:
+            raise ValueError("expected_channel_ids must contain integer identifiers") from exc
+        if not canonical:
+            raise ValueError("expected_channel_ids must not be empty")
+        if len(set(canonical)) != len(canonical):
+            raise ValueError("expected_channel_ids must be unique")
+        if canonical != sorted(canonical):
+            raise ValueError("expected_channel_ids must be in strictly increasing order")
+        channel_source = "argument"
+    else:
+        eligible_sets = [
+            tuple(sorted(frame["channels"]))
+            for frame in frames
+            if not frame["duplicate_channels"] and frame["parsed_time"] is not None
+        ]
+        if not eligible_sets:
+            raise ValueError(f"{path}: no structurally valid frames from which to infer channels")
+        counts = Counter(eligible_sets)
+        top_count = max(counts.values())
+        leaders = [channel_set for channel_set, count in counts.items() if count == top_count]
+        if len(leaders) != 1:
+            rendered = ", ".join(str(list(channel_set)) for channel_set in sorted(leaders))
+            raise ValueError(
+                f"{path}: ambiguous detector-channel sets ({rendered}); "
+                "declare expected_channel_ids in the instrument profile"
+            )
+        canonical = list(leaders[0])
+        channel_source = "inferred"
+
+    expected_set = set(canonical)
+    dropped_reasons: Counter[str] = Counter()
+    good = []
+    for frame in frames:
+        if frame["duplicate_channels"]:
+            dropped_reasons["duplicate_channel_ids"] += 1
+        elif frame["parsed_time"] is None:
+            dropped_reasons["unparseable_timestamp"] += 1
+        elif set(frame["channels"]) != expected_set:
+            dropped_reasons["channel_set_mismatch"] += 1
+        else:
+            good.append(frame)
+    dropped = sum(dropped_reasons.values())
+    if not good:
+        detail = ", ".join(f"{key}={value}" for key, value in sorted(dropped_reasons.items()))
+        raise ValueError(f"{path}: no structurally valid frames ({detail})")
 
     # Document-order timestamps → detect reverse ordering, then sort ascending (§2.3).
-    times_doc = [datetime.strptime(fr["time"], _TIME_FMT) for fr in good]
+    times_doc = [fr["parsed_time"] for fr in good]
     reverse_order_detected = len(times_doc) > 1 and times_doc[0] > times_doc[-1]
     order = np.argsort(times_doc)
     good = [good[i] for i in order]
@@ -131,7 +185,7 @@ def extract_run(
     I = np.array([[fr["channels"][c][1] for c in canonical] for fr in good], dtype=float)
     ref_all = np.array([[fr["channels"][c][0] for c in canonical] for fr in good], dtype=float)
     copt = np.array([fr["copt"] for fr in good], dtype=float)
-    times = [datetime.strptime(fr["time"], _TIME_FMT) for fr in good]
+    times = [fr["parsed_time"] for fr in good]
     t0 = times[0]
     t_min = np.array([(t - t0).total_seconds() / 60.0 for t in times])
 
@@ -158,6 +212,8 @@ def extract_run(
         "max_gap_min": max_gap_min,
         "n_frames": int(I.shape[0]),
         "dropped_frames": int(dropped),
+        "dropped_frame_reasons": dict(sorted(dropped_reasons.items())),
+        "expected_channel_ids_source": channel_source,
         "copt_nan": copt_nan,
         "run_kind_inferred": inferred,
     }

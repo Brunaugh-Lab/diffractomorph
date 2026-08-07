@@ -33,7 +33,8 @@ All adapters return `diffractomorph_pipeline.model.Run`, whose primary fields ar
 - `channel_ids`: stable, user-defined channel names;
 - `time_min`: chronological elapsed time;
 - `acquisition`: optional named frame-level variables;
-- `stored_reference`: an optional static channel vector;
+- `stored_reference`: an optional stored-reference channel vector, with its
+  selection and validation defined by the adapter;
 - `provenance`: explicit source, adapter, sample, and independent-unit identity.
 
 No fixed channel count, PAQXOS field, compound name, or preparation-date naming
@@ -47,8 +48,11 @@ Adapters are selected explicitly by ID. Gate 1 includes:
 - `tidy_csv`: a vendor-neutral wide CSV with `time_min`, one or more
   `signal_<channel>` columns, optional `acq_<name>` columns, and optional static
   `ref_<channel>` columns;
-- `paqxos_rtf`: the existing Sympatec PAQXOS export reader mapped into the neutral
-  run model.
+- `paqxos_rtf`: the Sympatec PAQXOS export reader mapped into the neutral run
+  model. When the instrument profile declares `channel_ids`, a frame is retained
+  only if it contains those identifiers exactly once, and output columns follow
+  the declared order. The adapter stores the earliest retained frame's reference
+  vector and flags reference variation across retained frames.
 
 Run `dfm-manifest --example --inspect-runs` to validate and inspect the packaged
 four-channel synthetic example without external data.

@@ -47,20 +47,23 @@ Channel, Ref Value, Measured Value
 | `Channel, Ref Value, Measured Value` | column header |
 | `<ch>, <ref>, <measured>` | per detector ring: index, **reference**, **measured** |
 
-## Three quirks the parser must respect
+## Parser contracts
 
 1. **Two intensity columns.** `Measured` is the per-frame signal (analysis
    target); `Ref` is the instrument's stored reference spectrum. **Capture
    both** — `Ref` feeds optional static-baseline subtraction (`I_bgsub = I − ref`)
-   and the staticness check.
-2. **`Ref` is static within a file** — one fixed vector stamped into every frame
-   (per-channel std ≈ 1e-15). The parser validates this and emits a `ref_static`
-   flag; a varying `Ref` means a malformed/concatenated export.
-3. **Frames are listed newest-first** — raw document order is
-   reverse-chronological. The parser **sorts by timestamp ascending** and records
-   `reverse_order_detected`. (The legacy `diffractomorph_core` bug: it reversed
-   the list on a wrong assumption and computed frame-to-frame metrics on
-   non-adjacent pairs.)
+   and the reference-variation check. The adapter retains the earliest valid
+   frame's stored-reference vector and flags variation across retained frames;
+   variation does not automatically exclude a frame.
+2. **Frame structure is validated against detector identifiers.** A PAQXOS
+   instrument profile may declare numeric `channel_ids` in strictly increasing
+   order. A frame is retained only when its timestamp is parseable and every
+   declared identifier occurs exactly once. Missing, additional, substituted,
+   or duplicate identifiers are counted by exclusion reason. Without declared
+   identifiers, the adapter infers a uniquely most frequent exact set and fails
+   closed when equally supported sets are ambiguous.
+3. **Frames may be listed newest-first.** The parser sorts by timestamp ascending
+   and records whether reverse document order was detected.
 
 `Measured` is **not** background-subtracted: in a blank,
 `Measured ≈ Ref ≈ 0.3–0.6` (not zero). `Measured − Ref` is the drug-attributable
@@ -70,7 +73,9 @@ The current parser treats each new `Measurement Time:` marker as the start of a 
 sorts parsed timestamps chronologically. It does not depend on `@PAR(1)` as a structural
 separator. In the PAQXOS 5.1 manual, `@PAR(1)` means the first user-defined measurement
 parameter; it is retained in the archived template body for fidelity but is not required by
-the parser or by intensity extraction.
+the parser or by intensity extraction. Missing Copt, reference variation,
+reverse document order, and interframe gaps are reported as run-level flags,
+not additional automatic frame exclusions.
 
 ## Output contract
 
@@ -83,7 +88,8 @@ compatibility properties. These names are not requirements for other adapters.
 
 `dfm-ingest` / `extract_run(emit_csv=True)` writes one tidy CSV per run —
 `frame, time_iso, t_min, copt, I_ch1 … I_ch31` — plus a `<run>_meta.json`
-sidecar carrying the static `ref` vector and `flags`.
+sidecar carrying the earliest retained frame's stored-reference vector and
+run-level flags.
 
 ## Open questions
 
