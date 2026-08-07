@@ -19,6 +19,7 @@ branch elsewhere (interpolation / extrapolation). Units: µg/mL.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -112,8 +113,10 @@ def fit_free_base(points, drug="CFZ", pka_prime=PKA_PRIME_CFZ, mw=MW_CFZ,
 
 
 def default_path() -> Path:
-    """Packaged artifact location (mirrors data/kernels, data/noise)."""
-    return Path(__file__).parent / "data" / "solubility" / "cfz_cs_ph.json"
+    """Caller-selected profile, falling back to the optional legacy artifact."""
+    selected = os.environ.get("DFM_SOLUBILITY_PROFILE")
+    return (Path(selected).expanduser() if selected else
+            Path(__file__).parent / "data" / "solubility" / "cfz_cs_ph.json")
 
 
 def load_default() -> SolubilityModel:

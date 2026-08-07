@@ -3,6 +3,7 @@ source of truth, loaded from ``data/assay/calibration.json``."""
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -62,8 +63,10 @@ class AssayCalibration:
 
 
 def default_path() -> Path:
-    """Packaged calibration artifact location."""
-    return Path(__file__).parent.parent / "data" / "assay" / "calibration.json"
+    """Caller-selected assay profile, falling back to the optional legacy artifact."""
+    selected = os.environ.get("DFM_ASSAY_PROFILE")
+    return (Path(selected).expanduser() if selected else
+            Path(__file__).parent.parent / "data" / "assay" / "calibration.json")
 
 
 def load_assay_profile(path: Path | str | Mapping[str, Any]) -> AssayCalibration:

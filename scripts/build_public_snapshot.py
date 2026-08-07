@@ -31,6 +31,16 @@ FORBIDDEN = {
 }
 
 
+def _study_file_allowed(relative: Path, policy: dict) -> bool:
+    """Allow only study code and the two reviewed study metadata documents."""
+    if not relative.as_posix().startswith("studies/"):
+        return True
+    return (
+        relative.suffix.lower() in set(policy["allowed_study_suffixes"])
+        or relative.name in set(policy["allowed_study_filenames"])
+    )
+
+
 def _included(relative: Path, policy: dict) -> bool:
     name = relative.as_posix()
     if name in policy["root_files"]:
@@ -41,6 +51,8 @@ def _included(relative: Path, policy: dict) -> bool:
         return False
     if name.startswith("src/diffractomorph_pipeline/data/"):
         return any(name.startswith(prefix + "/") for prefix in policy["allowed_data_prefixes"])
+    if name.startswith("studies/"):
+        return _study_file_allowed(relative, policy)
     return True
 
 
@@ -51,6 +63,24 @@ def _source_files(policy: dict):
         relative = path.relative_to(ROOT)
         if _included(relative, policy):
             yield path, relative
+
+
+def _study_tree_findings(policy: dict) -> list[str]:
+    """Fail closed if an unapproved file is placed anywhere in the public study layer."""
+    findings = []
+    study_root = ROOT / "studies"
+    if not study_root.exists():
+        return findings
+    for path in sorted(study_root.rglob("*")):
+        if path.is_dir() or "__pycache__" in path.parts:
+            continue
+        relative = path.relative_to(ROOT)
+        if not _study_file_allowed(relative, policy):
+            findings.append(
+                f"{relative}: unapproved study-layer file; data and generated artifacts belong "
+                "in the separately licensed archive"
+            )
+    return findings
 
 
 def _audit_text(path: Path, relative: Path) -> list[str]:
@@ -74,7 +104,7 @@ def build_snapshot(output: Path) -> None:
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"output directory is not empty: {output}")
     selected = list(_source_files(policy))
-    findings: list[str] = []
+    findings: list[str] = _study_tree_findings(policy)
     for source, relative in selected:
         if source.is_symlink():
             findings.append(f"{relative}: symlink")

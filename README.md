@@ -71,9 +71,12 @@ compatibility. A tidy-CSV adapter is included for portable examples and converte
 data.
 
 See [data contracts](docs/data_contracts.md), [file format](docs/file_format.md),
-and [scientific contracts](docs/scientific_contracts.md). New users can continue with the
-[replicated-study tutorial](docs/replicated_studies.md) and
-[calibration guide](docs/calibration.md).
+[scientific contracts](docs/scientific_contracts.md), and the
+[calibration guide](docs/calibration.md). New users can continue with the
+[replicated-study tutorial](docs/replicated_studies.md) or inspect the
+[clofazimine JPharmSci reference application](studies/jpharmsci_clofazimine/README.md). The latter
+keeps manuscript-specific parameters and figure workflows outside the generic package and requires
+the separately licensed data archive.
 
 ## Calibration and manuscript data
 

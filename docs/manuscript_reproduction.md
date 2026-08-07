@@ -5,15 +5,20 @@ layers. The code snapshot contains no real CFZ, PAQXOS, or NIST-derived payload.
 
 ## Current verified state
 
-The private development checkout has a restricted local manifest and one-command driver.
+The public repository now contains a restricted migration-equivalence study layer at
+`studies/jpharmsci_clofazimine`. Its manifest and one-command driver preserve the current
+manuscript science while the archive layout is finalized.
 It verifies the manuscript-facing reference PDFs, preflights required raw and derived inputs,
-runs nine declared recipes, records source/output hashes, scans generated files for disclosure,
+runs eleven declared recipes, records source/output hashes, scans generated files for disclosure,
 and writes a code-state-bound report covering the manifest, analysis modules, reusable package
-source, package version, and declared/actual Git commit. This local path passed independent review.
+source, package version, and declared/actual Git commit. The migration code and release boundary
+passed independent Gate 2 review; clean-room data-archive completion remains a separate gate.
 
-That result is not yet a public reproduction archive. The local manifest consumes a private
-corpus and selected derived tables. Some manuscript panels are assembled outside the generic
-pipeline and are checksum-verified rather than regenerated.
+This is not yet a clean-room public reproduction archive. The migration manifest still consumes
+the established local corpus layout and selected derived tables. It also declares four external,
+data-derived profiles (assay, solubility, noise surface, and optical kernel) that must be added to a
+new version of the separately licensed data archive. Some manuscript panels are assembled in the
+writing repository and are checksum-verified rather than regenerated.
 
 ## Final archive command
 
@@ -21,9 +26,11 @@ The eventual archive must provide an equivalent command of the form:
 
 ```bash
 python -m pip install diffractomorph_pipeline-<VERSION>-py3-none-any.whl
-dfm-reproduce-jpharmsci \
-  --bundle <downloaded-archive> \
-  --output-dir reproduced
+python studies/jpharmsci_clofazimine/reproduce.py \
+  --data-root <unpacked-archive> \
+  --manuscript-root <manuscript-checkout> \
+  --output-dir reproduced \
+  --mode all
 ```
 
 The exact command, version, DOI and checksum remain placeholders until the archive is

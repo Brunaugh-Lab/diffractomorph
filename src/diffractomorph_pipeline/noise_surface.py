@@ -261,8 +261,12 @@ def build_noise_surface(runs, obstruction_copt=OBSTRUCTION_COPT, dt_ok_min=DT_OK
 # ── Packaged default surface ─────────────────────────────────────────────────
 
 def _surface_path() -> Path:
+    import os
     from importlib import resources
-    return Path(resources.files("diffractomorph_pipeline")) / "data" / "noise" / "cfz_ph7_surface.json"
+    selected = os.environ.get("DFM_NOISE_SURFACE")
+    return (Path(selected).expanduser() if selected else
+            Path(resources.files("diffractomorph_pipeline")) /
+            "data" / "noise" / "cfz_ph7_surface.json")
 
 
 def load_surface(path: Path | str | None = None) -> NoiseSurface:

@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "bundle_id": "diffractomorph-jpharmsci-local-draft",
+  "status": "restricted-local-draft",
+  "pipeline_commit": "41d57549d1cb748793003e859e149fdf5ab0099d",
+  "manuscript_commit": "a97cbfa40a7f518881aca7bd95e2534b03932861",
+  "migration_source": {
+    "private_pipeline_commit": "72809f9",
+    "science_state": "frozen-copt-reference-before-summed-intensity-revision"
+  },
+  "publication_boundary": {
+    "redistributable": false,
+    "reason": "Real PAQXOS exports, NIST-derived calibration artifacts, and CFZ study data have not yet received an approved archive version and data license.",
+    "code_license_does_not_cover_data": true
+  },
+  "data_layout": {
+    "ph_study": "disso_experiments/ph_dependent_dissolution_study",
+    "arm_a": "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a",
+    "loading": "disso_experiments/conc_dependent_disso_study",
+    "arm_b": "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b"
+  },
+  "profiles": {
+    "DFM_ASSAY_PROFILE": "profiles/assay/calibration.json",
+    "DFM_SOLUBILITY_PROFILE": "profiles/solubility/cfz_cs_ph.json",
+    "DFM_NOISE_SURFACE": "profiles/noise/cfz_ph7_surface.json",
+    "DFM_OPTICAL_KERNEL": "profiles/kernels/R3_CFZ_20260601_1.71.npz"
+  },
+  "recipes": [
+    {
+      "id": "ph_core",
+      "script": "analysis/manuscript_figures.py",
+      "arguments": ["--study-root", "{ph_study}", "--output-dir", "{recipe_output}", "--formats", "pdf", "--figure", "all"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/summary/run_metadata.csv",
+        "disso_experiments/ph_dependent_dissolution_study/summary/uv_timecourse_all.csv",
+        "disso_experiments/ph_dependent_dissolution_study/summary/recovery_corrected.csv"
+      ],
+      "required_globs": ["disso_experiments/ph_dependent_dissolution_study/ph_*/*/*measurement*.rtf"],
+      "expected_outputs": [
+        "figures/Figure_pH_angular_scattering_kinetics.pdf",
+        "figures/Figure_UV_dissolved_mass_and_recovery.pdf",
+        "figures/Figure_optical_decay_vs_uv_recovery.pdf",
+        "source_data/Figure_pH_angular_scattering_kinetics_panelA_angular_trajectories.csv",
+        "source_data/Figure_UV_dissolved_mass_and_recovery_panelA_uv_trajectories.csv",
+        "tables/aggregate_kww_by_run.csv",
+        "tables/aggregate_kww_by_independent_unit.csv",
+        "tables/aggregate_kww_by_condition.csv",
+        "tables/Table_date_level_endpoints.csv",
+        "tables/Table_condition_level_summary.csv",
+        "README.md"
+      ]
+    },
+    {
+      "id": "angular_matched_extent_si",
+      "script": "analysis/manuscript_figures.py",
+      "arguments": ["--study-root", "{ph_study}", "--output-dir", "{recipe_output}", "--formats", "pdf", "--figure", "5"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/summary/run_metadata.csv",
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/redistribution_matched_g/matched_g_coverage.csv"
+      ],
+      "required_globs": ["disso_experiments/ph_dependent_dissolution_study/ph_*/*/*measurement*.rtf"],
+      "expected_outputs": [
+        "figures/Figure_5_matched_extent_redistribution.pdf",
+        "figures/Figure_S2_matched_extent_coverage.pdf",
+        "source_data/Figure_S2_matched_extent_coverage.csv",
+        "README.md"
+      ]
+    },
+    {
+      "id": "model_vs_q3",
+      "script": "analysis/manuscript_model_vs_q3_evolution.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/summary/run_metadata.csv"
+      ],
+      "required_globs": [
+        "disso_experiments/ph_dependent_dissolution_study/ph_*/*/*measurement*.rtf",
+        "disso_experiments/ph_dependent_dissolution_study/CFZ q3 csv/pH=*/*/Rep *"
+      ],
+      "expected_outputs": [
+        "model_vs_observed_q3_absolute_percentile_evolution.pdf",
+        "model_vs_observed_q3_absolute_percentile_source.csv",
+        "forward_state_conservation_checks.csv",
+        "interpretation_gate.csv"
+      ]
+    },
+    {
+      "id": "mass_domain_model",
+      "script": "analysis/manuscript_mass_domain_model.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_predictions.csv",
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_lodo_validation.csv",
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_candidate_models.csv",
+        "disso_experiments/ph_dependent_dissolution_study/summary/uv_timecourse_all.csv",
+        "disso_experiments/ph_dependent_dissolution_study/forward_prediction/scalar_fit/selected_rate_only_model_trajectories.csv",
+        "disso_experiments/ph_dependent_dissolution_study/forward_prediction/scalar_fit/fit_summary.csv",
+        "disso_experiments/ph_dependent_dissolution_study/forward_prediction/scalar_fit/selected_rate_only_pH5_transfer.csv"
+      ],
+      "expected_outputs": ["Figure_mass_domain_model_evaluation.pdf", "Figure_mass_domain_model_evaluation_source_data.csv", "Figure_mass_domain_model_evaluation_provenance.json"]
+    },
+    {
+      "id": "q3_matched_extent_si",
+      "script": "analysis/manuscript_si_q3_matched_extent.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/matched_extent/q3_matched_extent_by_run.csv",
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/matched_extent/q3_matched_extent_by_condition.csv",
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/model_vs_q3/observed_date_level_descriptors.csv",
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/model_vs_q3/observed_condition_descriptors_median.csv",
+        "disso_experiments/ph_dependent_dissolution_study/psd_evolution/model_vs_q3/q3_absolute_percentile_outlier_audit.csv"
+      ],
+      "expected_outputs": ["FigureS_q3_matched_extent_and_reproducibility.pdf", "FigureS_q3_matched_extent_and_reproducibility_source_data.csv", "FigureS_q3_matched_extent_and_reproducibility_provenance.json"]
+    },
+    {
+      "id": "starting_suspension_portability",
+      "script": "analysis/manuscript_starting_suspension_portability_revised.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/antisolvent_tween80_conc_uv_date_means.csv",
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_out_of_fold_predictions.csv",
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_candidate_models.csv",
+        "disso_experiments/dissolution_media_diagnostic/tween80_suspension_wetting_arm_a/analysis/rate_refinement/rate_refinement_lodo_validation.csv"
+      ],
+      "expected_outputs": ["Figure_starting_suspension_model_portability_revised.pdf", "Figure_starting_suspension_model_portability_revised_source_data.csv", "Figure_starting_suspension_model_portability_revised_provenance.json"]
+    },
+    {
+      "id": "loading_response",
+      "script": "analysis/manuscript_loading_response.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_runs.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_level_means.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_linearity.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_filter_offset_sensitivity.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_frames.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_matched_extent.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_size_path_spread.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/provenance.json"
+      ],
+      "expected_outputs": ["Figure_loading_response_model_transfer.pdf", "Figure_loading_response_model_transfer_source_data.csv", "Figure_loading_response_model_transfer_provenance.json"]
+    },
+    {
+      "id": "loading_diagnostics_si",
+      "script": "analysis/manuscript_si_loading_diagnostics.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_runs.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_level_means.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_linearity.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_filter_offset_sensitivity.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_frames.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_matched_extent.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/copt_loading_q3_size_path_spread.csv",
+        "disso_experiments/conc_dependent_disso_study/analysis/provenance.json"
+      ],
+      "expected_outputs": ["FigureS_loading_optical_and_reliability_diagnostics.pdf", "FigureS_loading_optical_and_reliability_diagnostics_source_data.csv", "FigureS_loading_optical_and_reliability_diagnostics_provenance.json"]
+    },
+    {
+      "id": "medium_polysorbate_response",
+      "script": "analysis/manuscript_arm_b_ld_response.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/angular_trajectories/arm_b_angular_trajectories_preps.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/angular_trajectories/arm_b_angular_trajectories_conditions.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/angular_trajectories/provenance.json",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/empirical_angular_kww/angular_kww_by_date_condition.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/empirical_angular_kww/angular_kww_by_condition.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/partition/filtered_48h_pipeline_copt/arm_b_partition_preps.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/partition/filtered_48h_pipeline_copt/arm_b_partition_conditions.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/q3/q3_matched_extent_balanced.csv",
+        "disso_experiments/dissolution_media_diagnostic/micelle_effects_tween80_arm_b/analysis/q3/q3_matched_extent_runs.csv"
+      ],
+      "expected_outputs": ["Figure_medium_polysorbate_ld_response.pdf", "Figure_medium_polysorbate_ld_response_source_data.csv", "Figure_medium_polysorbate_ld_response_provenance.json"]
+    },
+    {
+      "id": "channel_trajectory_si",
+      "script": "analysis/manuscript_channel_trajectory_heatmaps.py",
+      "arguments": ["--output-dir", "{recipe_output}", "--formats", "pdf"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/summary/run_metadata.csv"
+      ],
+      "required_globs": [
+        "disso_experiments/ph_dependent_dissolution_study/ph_*/*/*measurement*.rtf",
+        "disso_experiments/ph_dependent_dissolution_study/CFZ q3 csv/pH=*/*/Rep *"
+      ],
+      "expected_outputs": ["pH_condition_level_channel_trajectory_heatmaps.pdf", "channel_trajectory_heatmaps_source.csv", "channel_trajectory_condition_summary.csv"]
+    },
+    {
+      "id": "noise_control_si",
+      "script": "analysis/objective1_noise_control.py",
+      "arguments": ["--output-dir", "{recipe_output}"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/noise_floor",
+        "disso_experiments/ph_dependent_dissolution_study/summary/run_metadata.csv"
+      ],
+      "required_globs": [
+        "disso_experiments/ph_dependent_dissolution_study/noise_floor/**/*measurement*.rtf",
+        "disso_experiments/ph_dependent_dissolution_study/ph_*/*/*measurement*.rtf",
+        "disso_experiments/ph_dependent_dissolution_study/CFZ q3 csv/pH=*/*/Rep *"
+      ],
+      "expected_outputs": ["objective1_noise_control_diagnostic.pdf", "objective1_noise_control_per_run.csv", "objective1_noise_control_summary.json"]
+    }
+  ],
+  "reference_artifacts": [
+    {"path": "figures/Figure_physicochemical_characterization.pdf", "sha256": "32f28804af7b9ffa03fdb6385081983e0f305c1b719e8ceaa9b195c2d452e4df", "class": "writing-repo-assembly"},
+    {"path": "figures/physicochemical_solid_state_and_morphology_main.pdf", "sha256": "6d218006ceb687dabcba05ac757af1d6bb048e5e3b3480a1e0b30aa3d66783c7", "class": "writing-repo-component"},
+    {"path": "figures/physicochemical_dry_vs_suspension_q3_compact.pdf", "sha256": "d5a078fa2d834f953514dab7ce043e41fb7beaca7c71f0293cf67de80fd115d4", "class": "writing-repo-component"},
+    {"path": "figures/physicochemical_dispersive_surface_energy_compact.pdf", "sha256": "c1e47b7436dfe1c461f7c378bcbc15a32b610706f15affc23966094d4f1075f9", "class": "writing-repo-component"},
+    {"path": "figures/Figure_pH_angular_scattering_kinetics.pdf", "sha256": "2fccca38d1b6f0b3b521e45b738284ead1b8c2d48186d731e02352d5f1c53541", "class": "pipeline-generated", "generator": "ph_core"},
+    {"path": "figures/Figure_UV_dissolved_mass_and_recovery.pdf", "sha256": "613fb41d40489857192e7def5474dd4006fe6e04ae7eeeef71ce3acfa521ff44", "class": "pipeline-generated", "generator": "ph_core"},
+    {"path": "figures/Figure_optical_desmearing_and_resolution.pdf", "sha256": "b678696d40ae28a66886f52f3568344710e598ea7f1bb9626440463ebadd97c6", "class": "writing-repo-assembly"},
+    {"path": "figures/Figure_optical_desmearing_bottom.pdf", "sha256": "39c625ca96a3ccbf6acd887f624e39b4d35c28ccf9f8e4acf466ce18282bc420", "class": "writing-repo-component"},
+    {"path": "figures/Figure_size_composition_model_vs_q3.pdf", "sha256": "b9f73cb96b8f4e30ea8492a55edf27ccd56f9aaba68d9f315293bbedf7c57120", "class": "writing-repo-assembly", "components": [{"generator": "model_vs_q3", "generated_path": "model_vs_observed_q3_absolute_percentile_evolution.pdf"}]},
+    {"path": "figures/Figure_medium_polysorbate_ld_response.pdf", "sha256": "2631b0868888ff19f486c900c1aaf24e169e4006c51070d4bf5dc9e80adde0c5", "class": "pipeline-generated", "generator": "medium_polysorbate_response"},
+    {"path": "supporting_information/figures/objective1_noise_control_diagnostic.pdf", "sha256": "0babba94a3699be313a437d2fea4846020de5392a476aea26c21050f39f6f396", "class": "pipeline-generated", "generator": "noise_control_si"},
+    {"path": "supporting_information/figures/optical_decay_vs_uv_recovery.pdf", "sha256": "fec5dd25dec1258d463b4cd4e8e8509d68d9d3dd498124f7e0be4017c0f53092", "class": "pipeline-generated-renamed", "generator": "ph_core", "generated_path": "figures/Figure_optical_decay_vs_uv_recovery.pdf"},
+    {"path": "supporting_information/figures/ph_channel_trajectory_heatmaps.pdf", "sha256": "b7627c56cc8b6088cfa4fe04d94640bdbf81bfc26972c7dc9cdbcfc9adfb54d9", "class": "pipeline-generated-renamed", "generator": "channel_trajectory_si", "generated_path": "pH_condition_level_channel_trajectory_heatmaps.pdf"},
+    {"path": "supporting_information/figures/q3_matched_extent_and_reproducibility.pdf", "sha256": "636d6cdf58c628f33ac56d29cb7909929eb464bf0f1620e52167a667e8dde814", "class": "pipeline-generated-renamed", "generator": "q3_matched_extent_si", "generated_path": "FigureS_q3_matched_extent_and_reproducibility.pdf"},
+    {"path": "supporting_information/figures/matched_extent_coverage.pdf", "sha256": "802f15cccc169d23f2429f73734673ef98f1ca563fa46a7375fc7ef442fdd778", "class": "pipeline-generated-renamed", "generator": "angular_matched_extent_si", "generated_path": "figures/Figure_S2_matched_extent_coverage.pdf"},
+    {"path": "supporting_information/figures/loading_optical_and_reliability_diagnostics.pdf", "sha256": "aee55d92d4a8b8819eaa943860cacbc993dc84d3d42693bce6b2203f7b19cfaa", "class": "pipeline-generated-renamed", "generator": "loading_diagnostics_si", "generated_path": "FigureS_loading_optical_and_reliability_diagnostics.pdf"},
+    {"path": "figures/Figure_starting_suspension_model_portability_revised.pdf", "sha256": "fefa3c4f2333b33e4eb97ca4fba24626dd4213c070362fd2530ef6b2ec3858ea", "class": "pipeline-generated", "generator": "starting_suspension_portability"},
+    {"path": "figures/Figure_loading_response_model_transfer.pdf", "sha256": "2278c1f9730118216a9ad1073846025138de82571d190c4eb018708eaaa40bcf", "class": "pipeline-generated", "generator": "loading_response"},
+    {"path": "figures/Figure_mass_domain_model_evaluation.pdf", "sha256": "45474582923108a79bf3d5a821876a59950dbe01c91aaf63dd87d2e6515d7fa4", "class": "pipeline-generated", "generator": "mass_domain_model"},
+    {"path": "supporting_information/figures/optical_operator_feasibility_and_calibration_boundary.pdf", "sha256": "3930d34ae4b794a65945b8fede9211acf996630e00466750e4659b9fcd6af15f", "class": "study-generated-inputs-withheld", "generator": "figures/objective1_feasibility.py"}
+  ]
+}

@@ -18,6 +18,7 @@ package as ``diffractomorph_pipeline/optics/mie.py``.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -71,7 +72,9 @@ def _kernels_dir() -> Path:
 
 def load_kernel(path: Path | str | None = None) -> MieKernel:
     """Load an explicit kernel or the optional legacy default."""
-    selected = Path(path) if path is not None else _kernels_dir() / DEFAULT_KERNEL
+    env_path = os.environ.get("DFM_OPTICAL_KERNEL")
+    selected = (Path(path) if path is not None else
+                Path(env_path).expanduser() if env_path else _kernels_dir() / DEFAULT_KERNEL)
     if not selected.exists():
         raise FileNotFoundError(
             "the optional optical kernel is not installed; pass an explicit kernel path"

@@ -403,7 +403,7 @@ def test_missing_optional_legacy_profiles_fail_clearly(monkeypatch, tmp_path):
         mie.load_kernel(absent)
 
 
-def test_snapshot_builder_is_exact_and_manifest_complete(tmp_path):
+def test_snapshot_builder_is_exact_and_manifest_complete(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[2]
     output = tmp_path / "snapshot"
     subprocess.run(
@@ -432,6 +432,11 @@ def test_snapshot_builder_is_exact_and_manifest_complete(tmp_path):
     policy = json.loads((output / "release" / "public_snapshot_policy.json").read_text())
     assert "examples" not in policy["directory_roots"]
     assert not (output / "src" / "diffractomorph_pipeline" / "data" / "standards").exists()
+    forbidden_study_suffixes = {".csv", ".tsv", ".xlsx", ".xls", ".npz", ".rtf"}
+    assert not [
+        path for path in (output / "studies").rglob("*")
+        if path.is_file() and path.suffix.lower() in forbidden_study_suffixes
+    ]
     exported_template = (
         output / "docs" / "templates" / "paqxos_raw_intensity_report_template.txt"
     )
@@ -447,6 +452,18 @@ def test_snapshot_builder_is_exact_and_manifest_complete(tmp_path):
     builder = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(builder)
+    assert builder._study_file_allowed(
+        Path("studies/jpharmsci_clofazimine/analysis.py"), policy
+    )
+    assert not builder._study_file_allowed(
+        Path("studies/jpharmsci_clofazimine/derived.csv"), policy
+    )
+    fake_root = tmp_path / "fake-repo"
+    leaked_study_file = fake_root / "studies" / "jpharmsci_clofazimine" / "derived.csv"
+    leaked_study_file.parent.mkdir(parents=True)
+    leaked_study_file.write_text("real,data\n")
+    monkeypatch.setattr(builder, "ROOT", fake_root)
+    assert "unapproved study-layer file" in builder._study_tree_findings(policy)[0]
     disclosure = tmp_path / "disclosure.txt"
     disclosure.write_text(
         "contact person@med." + "umich.edu from /" + "home/person/project",
