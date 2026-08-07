@@ -62,11 +62,8 @@ Channel, Ref Value, Measured Value
    or duplicate identifiers are counted by exclusion reason. Without declared
    identifiers, the adapter infers a uniquely most frequent exact set and fails
    closed when equally supported sets are ambiguous.
-3. **Frames are listed newest-first** — raw document order is
-   reverse-chronological. The parser **sorts by timestamp ascending** and records
-   `reverse_order_detected`. (The legacy `diffractomorph_core` bug: it reversed
-   the list on a wrong assumption and computed frame-to-frame metrics on
-   non-adjacent pairs.)
+3. **Frames may be listed newest-first.** The parser sorts by timestamp ascending
+   and records whether reverse document order was detected.
 
 `Measured` is **not** background-subtracted: in a blank,
 `Measured ≈ Ref ≈ 0.3–0.6` (not zero). `Measured − Ref` is the drug-attributable
