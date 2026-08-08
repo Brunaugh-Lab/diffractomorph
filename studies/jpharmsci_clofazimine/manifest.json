@@ -200,6 +200,23 @@
         "disso_experiments/ph_dependent_dissolution_study/CFZ q3 csv/pH=*/*/Rep *"
       ],
       "expected_outputs": ["objective1_noise_control_diagnostic.pdf", "objective1_noise_control_per_run.csv", "objective1_noise_control_summary.json"]
+    },
+    {
+      "id": "manual_r3_operator",
+      "script": "figures/objective1_feasibility.py",
+      "arguments": ["--study-root", "{ph_study}", "--output-dir", "{recipe_output}"],
+      "required_inputs": [
+        "disso_experiments/ph_dependent_dissolution_study/QC/NIST_weekly_QCs/NIST QC Week of 20260608.rtf",
+        "disso_experiments/ph_dependent_dissolution_study/QC/NIST_weekly_QCs/NIST QC Week of 20260601.rtf"
+      ],
+      "expected_outputs": [
+        "optical_operator_feasibility_and_calibration_boundary.pdf",
+        "optical_operator_feasibility_and_calibration_boundary.png",
+        "objective1_metrics.json",
+        "objective1_measured_vs_predicted.csv",
+        "objective1_monodisperse_responses.csv",
+        "objective1_manual_r3_geometry.csv"
+      ]
     }
   ],
   "reference_artifacts": [
@@ -209,8 +226,8 @@
     {"path": "figures/physicochemical_dispersive_surface_energy_compact.pdf", "sha256": "c1e47b7436dfe1c461f7c378bcbc15a32b610706f15affc23966094d4f1075f9", "class": "writing-repo-component"},
     {"path": "figures/Figure_pH_angular_scattering_kinetics.pdf", "sha256": "2fccca38d1b6f0b3b521e45b738284ead1b8c2d48186d731e02352d5f1c53541", "class": "pipeline-generated", "generator": "ph_core"},
     {"path": "figures/Figure_UV_dissolved_mass_and_recovery.pdf", "sha256": "613fb41d40489857192e7def5474dd4006fe6e04ae7eeeef71ce3acfa521ff44", "class": "pipeline-generated", "generator": "ph_core"},
-    {"path": "figures/Figure_optical_desmearing_and_resolution.pdf", "sha256": "b678696d40ae28a66886f52f3568344710e598ea7f1bb9626440463ebadd97c6", "class": "writing-repo-assembly"},
-    {"path": "figures/Figure_optical_desmearing_bottom.pdf", "sha256": "39c625ca96a3ccbf6acd887f624e39b4d35c28ccf9f8e4acf466ce18282bc420", "class": "writing-repo-component"},
+    {"path": "figures/Figure_optical_desmearing_and_resolution.pdf", "sha256": "f9a5bf7a0d0c959051685fefe9a3be34411451a0544927fddb517c9c07010a6a", "class": "writing-repo-assembly"},
+    {"path": "figures/Figure_optical_desmearing_bottom.pdf", "sha256": "28d244437c3d6f94a5d8bac0f2f2a191124c8092169f60456ef6ef31025dca6c", "class": "writing-repo-component"},
     {"path": "figures/Figure_size_composition_model_vs_q3.pdf", "sha256": "b9f73cb96b8f4e30ea8492a55edf27ccd56f9aaba68d9f315293bbedf7c57120", "class": "writing-repo-assembly", "components": [{"generator": "model_vs_q3", "generated_path": "model_vs_observed_q3_absolute_percentile_evolution.pdf"}]},
     {"path": "figures/Figure_medium_polysorbate_ld_response.pdf", "sha256": "2631b0868888ff19f486c900c1aaf24e169e4006c51070d4bf5dc9e80adde0c5", "class": "pipeline-generated", "generator": "medium_polysorbate_response"},
     {"path": "supporting_information/figures/objective1_noise_control_diagnostic.pdf", "sha256": "0babba94a3699be313a437d2fea4846020de5392a476aea26c21050f39f6f396", "class": "pipeline-generated", "generator": "noise_control_si"},
@@ -222,6 +239,6 @@
     {"path": "figures/Figure_starting_suspension_model_portability_revised.pdf", "sha256": "fefa3c4f2333b33e4eb97ca4fba24626dd4213c070362fd2530ef6b2ec3858ea", "class": "pipeline-generated", "generator": "starting_suspension_portability"},
     {"path": "figures/Figure_loading_response_model_transfer.pdf", "sha256": "2278c1f9730118216a9ad1073846025138de82571d190c4eb018708eaaa40bcf", "class": "pipeline-generated", "generator": "loading_response"},
     {"path": "figures/Figure_mass_domain_model_evaluation.pdf", "sha256": "45474582923108a79bf3d5a821876a59950dbe01c91aaf63dd87d2e6515d7fa4", "class": "pipeline-generated", "generator": "mass_domain_model"},
-    {"path": "supporting_information/figures/optical_operator_feasibility_and_calibration_boundary.pdf", "sha256": "3930d34ae4b794a65945b8fede9211acf996630e00466750e4659b9fcd6af15f", "class": "study-generated-inputs-withheld", "generator": "figures/objective1_feasibility.py"}
+    {"path": "supporting_information/figures/optical_operator_feasibility_and_calibration_boundary.pdf", "sha256": "4086b52c0ec44aa5140e20b2ac73911fdbd06d57f64fe4ab2ef3e929cc6e13ff", "class": "pipeline-generated-renamed", "generator": "manual_r3_operator", "generated_path": "optical_operator_feasibility_and_calibration_boundary.pdf"}
   ]
 }

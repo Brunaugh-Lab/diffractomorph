@@ -1,7 +1,7 @@
 """Tests for the Objective-1 operator-feasibility analysis + CAREER figure.
 
-Two tiers: a vault-free pure-core tier that exercises the certified PSD, operator, shape metrics,
-geometry fit, and calibration-boundary diagnostics on the candidate operator; and a vault-gated tier
+Two tiers: a vault-free pure-core tier that exercises the certified PSD, fixed manual geometry,
+shape metrics, and resolution diagnostics; and a vault-gated tier
 that reproduces the headline audit numbers from the real NIST measurement files (skipped in CI).
 """
 import numpy as np
@@ -11,7 +11,7 @@ from figures import objective1_feasibility as o1
 from diffractomorph_pipeline.optics.standards import GRID
 
 # One modest-resolution operator, built once, reused across the pure-core tests.
-A_TEST = o1.build_physical_operator(9.88, n_quad=32)
+A_TEST = o1.build_physical_operator(n_quad=32)
 N_CERT = o1.certified_number_psd()
 
 
@@ -20,13 +20,26 @@ N_CERT = o1.certified_number_psd()
 def test_certified_psd_normalized_and_confined():
     assert abs(N_CERT.sum() - 1.0) < 1e-9
     assert np.all(N_CERT >= 0)
-    # certificate spans ~2.1-12.9 um; no submicron mass injected below the certified span
-    assert N_CERT[GRID < 1.8].sum() < 1e-6
+    # The explicit 0--5 % extrapolated tail begins near 1.7 um; no submicron mass is injected.
+    assert N_CERT[GRID < 1.5].sum() < 1e-6
     # essentially all number-weighted mass falls in the grid bins overlapping the certified band
     # (the 1.99 um bin, edges 1.8-2.2, legitimately catches the certified 2.1 um material; the d^-3
     # number weighting concentrates the PSD toward the small-diameter end of that band)
-    assert N_CERT[(GRID >= 1.9) & (GRID <= 14.0)].sum() > 0.98
-    assert N_CERT[GRID > 15.0].sum() < 1e-6
+    assert N_CERT[(GRID >= 1.6) & (GRID <= 20.0)].sum() > 0.99
+    assert N_CERT[GRID > 20.0].sum() < 1e-6
+
+
+def test_certified_cdf_preserves_every_certificate_knot():
+    assert np.allclose(o1.certified_cumulative(o1.CERT_D), o1.CERT_PCT, atol=1e-10)
+    low, high = o1.certified_tail_anchors()
+    assert low < o1.CERT_D[0] and high > o1.CERT_D[-1]
+    assert o1.certified_cumulative(np.array([low, high])).tolist() == pytest.approx([0.0, 100.0])
+
+
+def test_certified_cdf_tails_are_linear_in_log_diameter():
+    low, high = o1.certified_tail_anchors()
+    geometric_midpoints = np.sqrt([low * o1.CERT_D[0], o1.CERT_D[-1] * high])
+    assert o1.certified_cumulative(geometric_midpoints).tolist() == pytest.approx([2.5, 95.0])
 
 
 # ── pure core: operator + prediction ───────────────────────────────────────────────────────────
@@ -50,14 +63,14 @@ def test_shape_metrics_identity():
     assert m["tv"] == pytest.approx(0.0, abs=1e-9)
 
 
-def test_fit_theta_max_recovers_planted_geometry():
-    # obs generated at a known theta_max in a tiny grid → the fit must select that theta_max
-    grid = np.array([8.0, 9.88, 20.0])
-    A_true = o1.build_physical_operator(9.88, n_quad=32)
-    obs = o1.predict_channel_shape(A_true, N_CERT)
-    fit = o1.fit_theta_max(obs, N_CERT, mode="physical", grid=grid)
-    assert fit["theta_max_deg"] == pytest.approx(9.88, abs=1e-6)
-    assert fit["cosine"] == pytest.approx(1.0, abs=1e-4)
+def test_geometry_is_fixed_from_manual_edges_not_a_fit_parameter():
+    rings = o1.detector_rings()
+    assert len(rings) == 31
+    assert rings.is_monotonic
+    assert rings.theta_lo[0] == pytest.approx(0.0)
+    assert rings.theta_hi[0] == pytest.approx(0.189904, abs=1e-5)
+    assert rings.theta_hi[-1] == pytest.approx(40.126286, abs=1e-5)
+    assert not hasattr(o1, "fit_theta_max")
 
 
 # ── pure core: calibration-boundary diagnostics ─────────────────────────────────────────────────
@@ -74,7 +87,7 @@ def test_resolution_diagnostics_ranges():
 
 
 def test_monodisperse_distributed_and_overlapping():
-    mono = o1.monodisperse_responses(9.88, n_quad=64)
+    mono = o1.monodisperse_responses(n_quad=64)
     P = mono["profiles"]
     assert P.shape == (31, len(o1.MONODISPERSE_UM))
     assert np.allclose(P.sum(0), 1.0)
@@ -83,15 +96,6 @@ def test_monodisperse_distributed_and_overlapping():
     # neighbouring example diameters share substantial signal
     assert all(0.0 <= c <= 1.0 for c in mono["adjacent_pair_cosine"])
     assert max(mono["adjacent_pair_cosine"]) > 0.4
-
-
-def test_current_operator_differs_from_physical():
-    # the no-C_sca shortcut is a genuinely different operator (large-particle weighting missing)
-    cur = o1._current_operator(9.88)
-    assert cur.shape == A_TEST.shape
-    pc = o1.predict_channel_shape(cur, N_CERT)
-    pp = o1.predict_channel_shape(A_TEST, N_CERT)
-    assert not np.allclose(pc, pp, atol=1e-3)
 
 
 # ── vault-gated: reproduce the headline audit numbers from the real measurement files ────────────
@@ -105,12 +109,11 @@ def test_reproduces_audit_headline():
     r = o1.compute_objective1()
     f = r.feasibility
     # certified PSD → measured aggregate profile, C_sca-inclusive physical operator
-    assert r.theta_max_deg == pytest.approx(9.9, abs=1.0)
-    assert f["cosine"] >= 0.999                                  # ~0.9997
-    assert f["csca_cosine_gain"] > 0                             # C_sca is load-bearing (0.9928 → 0.9997)
-    assert f["physical_at_paqxos_theta_max_cosine"] < 0.96       # old PAQXOS 39.2° angular scale is wrong
-    assert f["held_out_transfer_cosine"] >= 0.997                # ~0.9989 second same-standard session
-    # limited independent size information over 2-15 um (~5 directions; strong neighbour overlap)
+    assert r.assumptions["geometry_fit_to_nist"] is False
+    assert 0.90 <= f["cosine"] <= 0.98
+    assert 0.88 <= f["second_session_cosine"] <= 0.98
+    assert f["second_session_negative_channel_frame_fraction"] > f["negative_channel_frame_fraction"]
+    # limited independent size information over 2-15 um; strong neighbour overlap
     b = r.boundary
-    assert 4.0 <= b["eff_rank_colnorm"] <= 7.0
+    assert 5.5 <= b["eff_rank_colnorm"] <= 8.0
     assert 0.8 <= b["adjacent_col_cosine_median"] <= 0.97

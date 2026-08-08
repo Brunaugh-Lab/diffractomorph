@@ -1,25 +1,26 @@
-"""Objective-1 grant figure: optical-operator *feasibility* and its *calibration boundary*.
+"""JPharmSci figure: fixed-geometry optical-operator evaluation and resolution boundary.
 
 Grant-facing (NSF CAREER) analysis + two-panel figure answering two questions about the
-DiffractoMorph HELOS R3 observation operator, using the **candidate physical operator**
-(:mod:`diffractomorph_pipeline.optics.mie_candidate`) — the production operator is not touched:
+DiffractoMorph HELOS R3 observation operator, using the manual-derived physical-operator
+implementation in :mod:`diffractomorph_pipeline.optics.mie_candidate`:
 
-1. **Physical feasibility (Panel A).** Can known scattering physics propagate an *independently
-   certified* particle population (NIST SRM 1021) into an aggregate 31-channel detector response
-   consistent with measurement? Propagate the certified SRM-1021 Q3 distribution (Table 1) through
-   the C_sca-inclusive Mie + annular-detector operator and compare the predicted normalized channel
-   profile to the measured one.
+1. **Fixed-geometry evaluation (Panel A).** Can known scattering physics propagate an
+   *independently certified* particle population (NIST SRM 1021) into an aggregate 31-channel
+   detector response consistent with measurement? The HELOS R3 annular boundaries are reconstructed
+   from the manufacturer's measuring-range table and Fraunhofer relation, then frozen before the
+   NIST measurements are examined. The certified SRM-1021 Q3 distribution is propagated through the
+   C_sca-inclusive Mie + annular-detector operator and compared with the normalized measured profile.
 
-2. **Calibration boundary (Panel B).** Why does agreement for one broad standard NOT establish
+2. **Resolution boundary (Panel B).** Why does agreement for one broad standard NOT establish
    unique diameter→channel localization? Show that monodisperse diameters produce *distributed,
    overlapping* channel signatures, and quantify the operator's limited independent size information
    (effective rank, adjacent-column overlap).
 
-This is a **feasibility and identifiability** analysis. It does NOT claim the production operator is
+This is an **evaluation and identifiability** analysis. It does NOT claim the production operator is
 calibrated, that a single standard validates every diameter-response column, that detector channels
-uniquely identify diameter, or that quantitative size-resolved flux is established. The one geometry
-degree of freedom (the angular scale ``theta_max``) is *fitted* to the measurement and is reported
-as such — a **calibrated** angular scale, not a **measured** one.
+uniquely identify diameter, or that quantitative size-resolved flux is established. No detector
+geometry parameter is fitted to NIST. Residual disagreement is retained because it is evidence of
+the remaining observation-model boundary, not removed by an effective angular-scale fit.
 
 The module is split into a pure compute core (operator build via ``mie_candidate``, the certified
 number PSD, shape metrics, resolution diagnostics — all array-in/array-out and unit-testable with no
@@ -29,18 +30,19 @@ depends on the working directory.
 
 Reproduce / export::
 
-    python -m diffractomorph_pipeline.figures.objective1_feasibility \
-        --nist-rtf <clean_session.rtf> --held-out-rtf <second_session.rtf> --output-dir <dir>
+    python studies/jpharmsci_clofazimine/figures/objective1_feasibility.py \
+        --nist-rtf <first_session.rtf> --second-session-rtf <second_session.rtf> --output-dir <dir>
 
 ``--output-dir`` is required; the input defaults resolve from the configured data corpus
 (``DFM_DATA_ROOT`` / ``.dfm.toml``). Outputs (into ``--output-dir``):
 ``optical_operator_feasibility_and_calibration_boundary.pdf`` (canonical vector) + ``.png`` (preview),
 ``objective1_metrics.json`` (metrics + geometry/RI assumptions + rank/overlap diagnostics +
-provenance), and two source-data CSVs.
+provenance), and three source-data CSVs.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,13 +62,16 @@ CERT_PCT = np.array([5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 
 CERT_D = np.array([2.1, 2.6, 3.0, 3.3, 3.7, 4.1, 4.5, 4.9, 5.3, 5.8, 6.3, 6.8, 7.4, 8.1, 8.9, 9.9,
                    11.1, 12.9], float)
 CERT_X50_UM = 5.8
+TAIL_CONVENTION = "log-linear quantile extrapolation"
+MANUAL_SHA256 = "3de98054905e5dbc2df4659b53f802f188ea1b75c61c68876fa2102b9fe0b173"
+CERTIFICATE_SHA256 = "a520543f1dad97d344efe9eabdafe70815dbc4d85d8a4d025937346d3fb6667d"
 
-# One geometry degree of freedom (the angular scale) is FITTED to the measured channel profile.
-# theta_min is a fixed sensitivity endpoint; theta_max is profiled over this grid (spans below the
-# ~10–15° optimum so the fit is interior, not railed). Same grid as the audit → same 9.9° optimum.
-THETA_MIN_DEG = 0.19
-THETA_MAX_GRID = np.geomspace(6.0, 55.0, 41)
-PAQXOS_FIT_TMAX_DEG = 39.185      # old circular PAQXOS-fitted angular scale (reference point only)
+# The primary geometry is fixed from the manufacturer's R3 measuring-range table. The 31 class
+# upper limits map to 31 nonzero detector-radius boundaries through r = 1.22 lambda_0 f / x; a
+# central r=0 edge gives 31 annuli. The radii are converted to liquid-phase Mie angles with the
+# sine-condition/Snell relation theta_med = asin[r/(n_med f)]. No geometry parameter is fitted to
+# NIST. See ``mie_candidate.r3_manual_rings`` for the traceable construction.
+RING_MAPPING = "medium"
 
 # Panel-B representative monodisperse diameters (µm). 1 µm is below the certified span (deliberately —
 # it shows the sub-2 µm signature the standard cannot constrain).
@@ -77,38 +82,81 @@ RESOLUTION_LO_UM = 2.0
 RESOLUTION_HI_UM = 15.0
 
 # Default measurement provenance (overridable on the CLI), resolved from the configured data corpus
-# (DFM_DATA_ROOT / .dfm.toml) — never an absolute path. The clean session is used to calibrate the
-# angular scale; the second same-standard session is a held-out transfer check. When the corpus is
+# (DFM_DATA_ROOT / .dfm.toml) — never an absolute path. The first session evaluates the fixed
+# operator; the second same-standard session provides a cross-session check without refitting. When the corpus is
 # unconfigured these are non-existent sentinels, so `.exists()` guards skip rather than error.
 _WEEKLY = corpus("disso_experiments", "ph_dependent_dissolution_study", "QC", "NIST_weekly_QCs")
-DEFAULT_NIST_RTF = _WEEKLY / "NIST QC Week of 20260608.rtf"          # clean net (calibration)
-DEFAULT_HELDOUT_RTF = _WEEKLY / "NIST QC Week of 20260601.rtf"       # 2nd session (held-out transfer)
+DEFAULT_NIST_RTF = _WEEKLY / "NIST QC Week of 20260608.rtf"
+DEFAULT_HELDOUT_RTF = _WEEKLY / "NIST QC Week of 20260601.rtf"
 FIGURE_BASENAME = "optical_operator_feasibility_and_calibration_boundary"
 
 
 # ── Certified distribution → number PSD (certificate only, no PAQXOS) ────────────────────────────
 
-def certified_number_psd(grid: np.ndarray = GRID, edges: np.ndarray = EDGES) -> np.ndarray:
-    """Nominal certified SRM-1021 **number** PSD on the R3 grid (n ∝ q3 / d³).
+def certified_tail_anchors() -> tuple[float, float]:
+    """Return prespecified 0 % and 100 % anchors outside the certified 5--90 % knots.
 
-    Monotone (PCHIP) interpolation of the certified cumulative *volume* in log-diameter, anchored at
-    the certified span endpoints (2.1 µm → 0 %, 12.9 µm → 100 %), differenced onto the class edges to
-    per-bin volume, then converted to number and normalized. No submicron PAQXOS mass is added. This
-    reproduces the ``nominal`` reconstruction of the forward-operator audit exactly.
+    The certificate does not specify the outer 0--5 % or 90--100 % tails. We therefore extend the
+    first and last local slopes linearly in log-diameter to 0 % and 100 %. This preserves every
+    certified knot, introduces no NIST detector data, and makes the tail convention explicit.
+    """
+    logd = np.log(CERT_D)
+    low = np.exp(logd[0] + (0.0 - CERT_PCT[0]) * (logd[1] - logd[0]) /
+                 (CERT_PCT[1] - CERT_PCT[0]))
+    high = np.exp(logd[-1] + (100.0 - CERT_PCT[-1]) * (logd[-1] - logd[-2]) /
+                  (CERT_PCT[-1] - CERT_PCT[-2]))
+    return float(low), float(high)
+
+
+def certified_cumulative(d_um: np.ndarray | float,
+                         tail_anchors_um: tuple[float, float] | None = None) -> np.ndarray:
+    """Certified cumulative volume fraction with explicit log-linear tails.
+
+    PCHIP is confined to the certificate's reported 5--90 % knots. The unreported tails are linear
+    in cumulative percentage versus log diameter between the prespecified 0/100 % anchors and the
+    terminal certificate knots. Values outside the anchors are fixed at 0 or 100 %.
     """
     from scipy.interpolate import PchipInterpolator
 
-    dk = np.r_[2.1, CERT_D, 12.9]
-    ck = np.r_[0.0, CERT_PCT, 100.0]
-    o = np.argsort(dk)
-    dk, ck = dk[o], ck[o]
-    dk, idx = np.unique(dk, return_index=True)
-    ck = np.maximum.accumulate(ck[idx])
-    f = PchipInterpolator(np.log(dk), ck, extrapolate=False)
-    Qe = f(np.log(edges))
-    Qe = np.where(edges < dk.min(), 0.0, Qe)
-    Qe = np.where(edges > dk.max(), 100.0, Qe)
-    Qe = np.maximum.accumulate(np.clip(np.nan_to_num(Qe, nan=0.0), 0.0, 100.0))
+    low, high = certified_tail_anchors() if tail_anchors_um is None else tail_anchors_um
+    if not (0 < low < CERT_D[0] and high > CERT_D[-1]):
+        raise ValueError("tail anchors must lie outside the certified 5--90 % diameter knots")
+    d = np.asarray(d_um, float)
+    q = np.zeros_like(d)
+    positive = d > 0
+    logd = np.zeros_like(d)
+    logd[positive] = np.log(d[positive])
+
+    low_tail = positive & (d >= low) & (d < CERT_D[0])
+    q[low_tail] = CERT_PCT[0] * (
+        (logd[low_tail] - np.log(low)) / (np.log(CERT_D[0]) - np.log(low))
+    )
+
+    interior = (d >= CERT_D[0]) & (d <= CERT_D[-1])
+    pchip = PchipInterpolator(np.log(CERT_D), CERT_PCT, extrapolate=False)
+    q[interior] = pchip(logd[interior])
+
+    high_tail = (d > CERT_D[-1]) & (d <= high)
+    q[high_tail] = CERT_PCT[-1] + (100.0 - CERT_PCT[-1]) * (
+        (logd[high_tail] - np.log(CERT_D[-1])) /
+        (np.log(high) - np.log(CERT_D[-1]))
+    )
+    q[d > high] = 100.0
+    return np.clip(q, 0.0, 100.0)
+
+
+def certified_number_psd(grid: np.ndarray = GRID, edges: np.ndarray = EDGES,
+                         tail_anchors_um: tuple[float, float] | None = None) -> np.ndarray:
+    """Nominal certified SRM-1021 **number** PSD on the R3 grid (n ∝ q3 / d³).
+
+    PCHIP interpolation of the certified cumulative *volume* in log-diameter preserves every 5--90 %
+    certificate knot. The unreported tails use explicit log-linear interpolation to the anchors from
+    :func:`certified_tail_anchors`; the cumulative is then differenced on the R3 edges, converted to
+    number, and normalized. No detector measurement or PAQXOS-derived size distribution enters this
+    reconstruction.
+    """
+    Qe = certified_cumulative(edges, tail_anchors_um)
+    Qe = np.maximum.accumulate(np.nan_to_num(Qe, nan=0.0))
     vol = np.empty(len(edges))
     vol[0] = Qe[0]
     vol[1:] = np.diff(Qe)
@@ -134,38 +182,60 @@ def observed_net_shape(rtf_path: Path | str) -> np.ndarray:
     return v / s if s else v
 
 
-# ── Physical operator (the candidate C_sca + annular operator; NOT reimplemented here) ───────────
+def observed_signal_summary(rtf_path: Path | str) -> dict:
+    """Primary net profile, transform sensitivities, and clipping diagnostics for one RTF."""
+    run = ingest.extract_run(rtf_path)
+    frames = np.asarray(run.I, float)
+    ref = np.asarray(run.ref, float)
+    net_frames = frames - ref[None, :]
+    net_mean = net_frames.mean(0)
 
-def build_physical_operator(theta_max_deg: float, theta_min_deg: float = THETA_MIN_DEG,
-                            diams: np.ndarray = GRID, n_quad: int = 64) -> np.ndarray:
-    """Diameter→channel response matrix ``A`` (31 × D) from the candidate physical operator.
+    def _shape(v):
+        x = np.clip(np.asarray(v, float), 0.0, None)
+        return x / x.sum()
 
-    Delegates to :func:`mie_candidate.response_matrix` over log-spaced detector rings between the two
-    angular endpoints — the C_sca-inclusive, annular-integrated Mie operator. Optics are fixed inside
-    ``mie_candidate`` (He–Ne λ = 0.6328 µm, soda-lime glass n = 1.52, medium n = 1.331 nominal).
+    return dict(
+        primary=_shape(net_mean),
+        measured_sensitivity=_shape(frames.mean(0)),
+        net_over_ref_sensitivity=_shape(net_mean / ref),
+        negative_channel_frame_fraction=float(np.mean(net_frames < 0.0)),
+        negative_mean_channel_count=int(np.sum(net_mean < 0.0)),
+        clipping_rule="average I minus stored reference over frames; clip negative channel means once; normalize",
+    )
+
+
+def _sha256(path: Path | str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+# ── Physical operator (manual-derived annuli + C_sca-inclusive Mie response) ────────────────────
+
+def detector_rings(n_med: float = mc.N_MED) -> mc.DetectorRings:
+    """Return the frozen HELOS R3 annuli reconstructed from the manual's class limits.
+
+    ``EDGES`` contains the 31 R3 class upper limits (0.9--175 µm). The helper converts those limits
+    to detector-plane radii using the manual's Fraunhofer relation, adds the central radius, and maps
+    the resulting 32 boundaries to liquid-phase angles. The geometry is independent of NIST data.
     """
-    rings = mc.log_rings(theta_min_deg, theta_max_deg, mc.N_CHANNELS)
-    return mc.response_matrix(diams, rings, mc.GLASS_RI, n_quad=n_quad)
+    return mc.r3_manual_rings(EDGES, n_med=n_med, mapping=RING_MAPPING)
 
 
-def _current_operator(theta_max_deg: float, theta_min_deg: float = THETA_MIN_DEG,
-                      diams: np.ndarray = GRID) -> np.ndarray:
-    """The production *shortcut* operator (centre-angle × θ², **no** C_sca) — for the ablation only.
+def build_physical_operator(diams: np.ndarray = GRID, n_quad: int = 64,
+                            n_particle: float = mc.GLASS_RI,
+                            n_med: float = mc.N_MED) -> np.ndarray:
+    """Diameter→channel response matrix ``A`` (31 × D) on the frozen R3 annuli.
 
-    This is not the production kernel object; it re-expresses the two shortcuts the production build
-    takes (no scattering cross-section; single centre angle × θ² instead of an annular integral) so
-    the C_sca contribution can be isolated. Used only to show C_sca is the load-bearing term.
+    Each entry is the particle scattering cross-section multiplied by the unpolarized Mie phase
+    function integrated over one annulus. Optics are fixed at He–Ne λ = 0.6328 µm, soda-lime glass
+    ``n=1.52``, and nominal aqueous-medium ``n=1.331`` unless explicitly changed for sensitivity.
     """
-    import miepython as mp
-
-    edges = np.logspace(np.log10(theta_min_deg), np.log10(theta_max_deg), mc.N_CHANNELS + 1)
-    th = np.sqrt(edges[:-1] * edges[1:])
-    m = complex(mc.GLASS_RI, 0.0) / mc.N_MED
-    A = np.empty((mc.N_CHANNELS, len(diams)))
-    for i, d in enumerate(diams):
-        x = np.pi * d * mc.N_MED / mc.LAMBDA0_UM
-        A[:, i] = mp.i_unpolarized(m, x, np.cos(np.deg2rad(th)), norm="one")
-    return A * (th ** 2)[:, None]
+    return mc.response_matrix(
+        diams, detector_rings(n_med), n_particle, n_med=n_med, n_quad=n_quad
+    )
 
 
 def predict_channel_shape(A: np.ndarray, n: np.ndarray) -> np.ndarray:
@@ -183,23 +253,6 @@ def shape_metrics(pred: np.ndarray, obs: np.ndarray) -> dict:
     corr = float(np.corrcoef(p, q)[0, 1])
     tv = float(0.5 * np.abs(p - q).sum())
     return dict(cosine=round(cos, 4), corr=round(corr, 4), tv=round(tv, 4))
-
-
-def fit_theta_max(obs: np.ndarray, n_cert: np.ndarray, mode: str = "physical",
-                  theta_min_deg: float = THETA_MIN_DEG, grid: np.ndarray = THETA_MAX_GRID) -> dict:
-    """Fit the angular scale ``theta_max`` by maximizing cosine(predicted, observed) — blur = 0.
-
-    ``mode='physical'`` uses the candidate C_sca + annular operator; ``mode='current'`` uses the
-    no-C_sca production shortcut. Returns the best ``theta_max`` and its shape metrics.
-    """
-    build = build_physical_operator if mode == "physical" else _current_operator
-    best = None
-    for t in grid:
-        A = build(float(t), theta_min_deg)
-        met = shape_metrics(predict_channel_shape(A, n_cert), obs)
-        if best is None or met["cosine"] > best["cosine"]:
-            best = dict(theta_max_deg=float(t), **met)
-    return best
 
 
 def resolution_diagnostics(A: np.ndarray, grid: np.ndarray = GRID,
@@ -234,15 +287,17 @@ def resolution_diagnostics(A: np.ndarray, grid: np.ndarray = GRID,
                 adjacent_col_cosine_min=round(float(adj.min()), 4))
 
 
-def monodisperse_responses(theta_max_deg: float, diams: np.ndarray = MONODISPERSE_UM,
-                           theta_min_deg: float = THETA_MIN_DEG, n_quad: int = 128) -> dict:
+def monodisperse_responses(diams: np.ndarray = MONODISPERSE_UM, n_quad: int = 128,
+                           n_particle: float = mc.GLASS_RI,
+                           n_med: float = mc.N_MED) -> dict:
     """Per-diameter normalized channel responses + centroid, FWHM (channels), and adjacent overlap.
 
-    Uses the same candidate operator / geometry as the feasibility panel. Each monodisperse diameter
-    yields a distributed response (never one channel); neighbouring diameters overlap strongly.
+    Uses the same fixed manual-derived geometry as Panel A. Each monodisperse diameter yields a
+    distributed response (never one channel); neighbouring diameters overlap strongly.
     """
-    rings = mc.log_rings(theta_min_deg, theta_max_deg, mc.N_CHANNELS)
-    A = mc.response_matrix(diams, rings, mc.GLASS_RI, n_quad=n_quad)
+    A = mc.response_matrix(
+        diams, detector_rings(n_med), n_particle, n_med=n_med, n_quad=n_quad
+    )
     ch = np.arange(1, mc.N_CHANNELS + 1)
     P = A / np.clip(A.sum(0, keepdims=True), 1e-30, None)      # per-diameter normalized
     cent = (P * ch[:, None]).sum(0)
@@ -258,11 +313,10 @@ def monodisperse_responses(theta_max_deg: float, diams: np.ndarray = MONODISPERS
 @dataclass
 class Objective1Result:
     """Everything the figure and the machine-readable exports need."""
-    measured: np.ndarray                 # observed normalized channel shape (calibration session)
+    measured: np.ndarray                 # observed normalized channel shape (first session)
     predicted: np.ndarray                # predicted normalized channel shape (certified PSD)
     n_cert: np.ndarray                   # certified number PSD on the R3 grid
-    theta_max_deg: float
-    feasibility: dict                    # cosine/corr/tv (fit) + held-out transfer + C_sca ablation
+    feasibility: dict                    # fixed-geometry metrics + second-session repeatability
     boundary: dict                       # resolution diagnostics
     monodisperse: dict                   # per-diameter responses
     assumptions: dict                    # geometry + refractive-index + optics
@@ -271,43 +325,68 @@ class Objective1Result:
 
 
 def compute_objective1(nist_rtf: Path | str = DEFAULT_NIST_RTF,
-                       held_out_rtf: Path | str | None = DEFAULT_HELDOUT_RTF,
-                       theta_min_deg: float = THETA_MIN_DEG) -> Objective1Result:
+                       second_session_rtf: Path | str | None = DEFAULT_HELDOUT_RTF) -> Objective1Result:
     """Full Objective-1 computation from measurement files + the certified certificate.
 
-    Calibrates the angular scale on ``nist_rtf`` (the clean session), predicts the certified PSD,
-    scores feasibility, runs the C_sca ablation, transfers the frozen operator to ``held_out_rtf``
-    (same standard, different session), and computes the calibration-boundary diagnostics.
+    Builds the manual-derived geometry without consulting either measurement, propagates the
+    certified PSD, scores agreement against ``nist_rtf``, applies the same fixed operator to
+    ``second_session_rtf`` (same standard, different session), and computes the resolution diagnostics.
     """
     n_cert = certified_number_psd()
-    obs = observed_net_shape(nist_rtf)
-
-    fit = fit_theta_max(obs, n_cert, mode="physical", theta_min_deg=theta_min_deg)
-    theta_max = fit["theta_max_deg"]
-    A = build_physical_operator(theta_max, theta_min_deg)
+    sig = observed_signal_summary(nist_rtf)
+    obs = sig["primary"]
+    A = build_physical_operator(n_quad=96)
     predicted = predict_channel_shape(A, n_cert)
-
-    # C_sca ablation: best no-C_sca fit vs the physical fit, and the physical fit evaluated at the
-    # old circular PAQXOS angular scale (39.2°) — both show C_sca is load-bearing and 39.2° is wrong.
-    cur = fit_theta_max(obs, n_cert, mode="current", theta_min_deg=theta_min_deg)
-    at_paqxos = shape_metrics(
-        predict_channel_shape(build_physical_operator(PAQXOS_FIT_TMAX_DEG, theta_min_deg), n_cert), obs)
-
+    primary = shape_metrics(predicted, obs)
     feasibility = dict(
-        theta_max_deg=round(theta_max, 2),
-        cosine=fit["cosine"], corr=fit["corr"], tv=fit["tv"],
-        no_csca_best_cosine=cur["cosine"], no_csca_best_theta_max_deg=round(cur["theta_max_deg"], 2),
-        physical_at_paqxos_theta_max_cosine=at_paqxos["cosine"],
-        csca_cosine_gain=round(fit["cosine"] - cur["cosine"], 4),
+        geometry="manual-derived R3 annuli; no parameter fitted to NIST",
+        cosine=primary["cosine"], corr=primary["corr"], tv=primary["tv"],
+        negative_channel_frame_fraction=round(sig["negative_channel_frame_fraction"], 6),
+        negative_mean_channel_count=sig["negative_mean_channel_count"],
+        signal_transform_sensitivity=dict(
+            measured_value=shape_metrics(predicted, sig["measured_sensitivity"]),
+            net_over_reference=shape_metrics(predicted, sig["net_over_ref_sensitivity"]),
+        ),
     )
 
-    if held_out_rtf is not None and Path(held_out_rtf).exists():
-        obs_ho = observed_net_shape(held_out_rtf)
-        feasibility["held_out_transfer_cosine"] = shape_metrics(predicted, obs_ho)["cosine"]
-        feasibility["held_out_rtf"] = str(held_out_rtf)
+    tail_sensitivity = {}
+    tail_predictions = {}
+    for label, anchors in {
+        "compact_2.05_13.0_um": (2.05, 13.0),
+        "R3_bracket_1.8_15.0_um": (1.8, 15.0),
+    }.items():
+        pred_alt = predict_channel_shape(A, certified_number_psd(tail_anchors_um=anchors))
+        tail_predictions[label] = pred_alt
+        tail_sensitivity[label] = shape_metrics(pred_alt, obs)
+    feasibility["certified_tail_sensitivity"] = tail_sensitivity
+
+    arctan_rings = mc.r3_manual_rings(EDGES, n_med=mc.N_MED, mapping="arctan")
+    arctan_A = mc.response_matrix(GRID, arctan_rings, mc.GLASS_RI, n_med=mc.N_MED, n_quad=96)
+    arctan_pred = predict_channel_shape(arctan_A, n_cert)
+    feasibility["angle_mapping_sensitivity_arctan"] = shape_metrics(arctan_pred, obs)
+    feasibility["reversed_channel_order_cosine"] = shape_metrics(predicted, obs[::-1])["cosine"]
+
+    if second_session_rtf is not None and Path(second_session_rtf).exists():
+        sig_ho = observed_signal_summary(second_session_rtf)
+        obs_ho = sig_ho["primary"]
+        feasibility["second_session_cosine"] = shape_metrics(predicted, obs_ho)["cosine"]
+        feasibility["second_session_rtf"] = str(second_session_rtf)
+        feasibility["second_session_negative_channel_frame_fraction"] = round(
+            sig_ho["negative_channel_frame_fraction"], 6)
+        feasibility["second_session_negative_mean_channel_count"] = sig_ho["negative_mean_channel_count"]
+        feasibility["second_session_signal_transform_sensitivity"] = dict(
+            measured_value=shape_metrics(predicted, sig_ho["measured_sensitivity"]),
+            net_over_reference=shape_metrics(predicted, sig_ho["net_over_ref_sensitivity"]),
+        )
+        feasibility["second_session_certified_tail_sensitivity"] = {
+            label: shape_metrics(pred_alt, obs_ho) for label, pred_alt in tail_predictions.items()
+        }
+        feasibility["second_session_angle_mapping_sensitivity_arctan"] = shape_metrics(arctan_pred, obs_ho)
+        feasibility["second_session_reversed_channel_order_cosine"] = shape_metrics(
+            predicted, obs_ho[::-1])["cosine"]
 
     boundary = resolution_diagnostics(A)
-    mono = monodisperse_responses(theta_max, theta_min_deg=theta_min_deg)
+    mono = monodisperse_responses()
     boundary["monodisperse_adjacent_pair_cosine"] = [round(c, 4) for c in mono["adjacent_pair_cosine"]]
     boundary["monodisperse_diams_um"] = mono["diams_um"].tolist()
 
@@ -320,13 +399,27 @@ def compute_objective1(nist_rtf: Path | str = DEFAULT_NIST_RTF,
         medium_ri_note="pH-7 Britton-Robinson buffer, unmeasured; nominal water value carried as a "
                        "bounded-sensitivity input, not a fact",
         detector_focal_mm=mc.R3_FOCAL_MM,
-        theta_min_deg=theta_min_deg,
-        theta_min_note="fixed inner-angle sensitivity endpoint (not a measured ring geometry)",
-        theta_max_deg=round(theta_max, 3),
-        theta_max_note="FITTED angular scale (calibrated to this measurement) — a calibrated, not a "
-                       "measured, geometry; not the old PAQXOS-fitted 39.2 deg",
-        detector_geometry="log-spaced angular rings (assumed Fraunhofer boundaries; real HELOS R3 "
-                          "ring radii not yet available)",
+        detector_channels=mc.N_CHANNELS,
+        class_upper_edges_um=EDGES.tolist(),
+        detector_geometry=(
+            "31 nonuniform R3 annuli reconstructed from the manufacturer's 0.9--175 um class "
+            "upper limits and r = 1.22 lambda_0 f / x, with a central r=0 boundary"
+        ),
+        radius_to_angle_mapping="theta_medium = asin[r / (n_medium f)]",
+        theta_min_deg=round(float(detector_rings().theta_lo[0]), 6),
+        first_nonzero_boundary_deg=round(float(detector_rings().theta_hi[0]), 6),
+        theta_max_deg=round(float(detector_rings().theta_hi[-1]), 6),
+        geometry_fit_to_nist=False,
+        geometry_status="nominal optical-equivalent annuli inferred from the manual class limits; "
+                        "not mechanical detector metrology",
+        omitted_detector_effects=["semiring gaps and center elements", "aberration", "channel gain",
+                                  "blur", "polarization-specific response"],
+        azimuthal_coverage="full-annulus equivalent; a uniform semiring collection factor cancels "
+                           "when each channel profile is normalized to unit sum",
+        channel_orientation="current RTF channel order is used; direct versus reversed comparison is "
+                            "reported as an empirical orientation check, not manufacturer proof",
+        certified_distribution_tail_convention=TAIL_CONVENTION,
+        certified_distribution_tail_anchors_um=[round(v, 6) for v in certified_tail_anchors()],
         scattering_model="Mie C_sca(d) = pi (d/2)^2 Q_sca(d), annular integral of the unpolarized "
                          "phase function over each ring's [theta_lo, theta_hi]",
         normalization="both predicted and measured profiles normalized to unit sum; agreement scored "
@@ -334,20 +427,29 @@ def compute_objective1(nist_rtf: Path | str = DEFAULT_NIST_RTF,
     )
 
     provenance = dict(
-        calibration_rtf=str(nist_rtf),
+        primary_evaluation_rtf=str(nist_rtf),
+        primary_evaluation_rtf_sha256=_sha256(nist_rtf),
+        second_session_rtf_sha256=(
+            _sha256(second_session_rtf)
+            if second_session_rtf is not None and Path(second_session_rtf).exists() else None
+        ),
         certificate="NIST SRM 1021, 1021.pdf Table 1 (cumulative volume fraction finer); certified "
                     "x50,3 = 5.8 um; supported span ~2.1-12.9 um",
         certified_x50_um=CERT_X50_UM,
         r3_grid_um=GRID.tolist(),
-        candidate_operator="diffractomorph_pipeline.optics.mie_candidate (isolated; production "
-                           "operator optics/mie.py NOT modified)",
+        forward_operator="diffractomorph_pipeline.optics.mie_candidate manual-derived R3 annuli; "
+                         "production operator optics/mie.py NOT modified",
+        geometry_source="Sympatec HELOS/R Operating Instructions, 24 November 2009, item "
+                        "BM00010E.W: R3 measuring-range table and Fraunhofer relation",
+        geometry_source_sha256=MANUAL_SHA256,
+        certificate_sha256=CERTIFICATE_SHA256,
     )
 
     return Objective1Result(
-        measured=obs, predicted=predicted, n_cert=n_cert, theta_max_deg=theta_max,
+        measured=obs, predicted=predicted, n_cert=n_cert,
         feasibility=feasibility, boundary=boundary, monodisperse=mono,
         assumptions=assumptions, provenance=provenance,
-        meta=dict(theta_max_grid=[round(float(t), 3) for t in THETA_MAX_GRID]),
+        meta=dict(geometry_fitted=False),
     )
 
 
@@ -392,15 +494,15 @@ def render_career_figure(result: Objective1Result, out_dir: Path | str,
              label="predicted (certified PSD → operator)")
     f = result.feasibility
     metric_txt = f"cosine = {f['cosine']:.4f}"
-    if "held_out_transfer_cosine" in f:
+    if "second_session_cosine" in f:
         # "second NIST session" (same SRM-1021 standard, re-measured; angular scale not refitted) —
         # avoids implying validation against a different particle-size distribution.
-        metric_txt += f"\nsecond NIST session: {f['held_out_transfer_cosine']:.4f}"
+        metric_txt += f"\nsecond NIST session: {f['second_session_cosine']:.4f}"
     # The measured/predicted profile rises left→right, so the bottom-right corner is empty — put the
     # metric box there, clear of the upper-left legend.
     axA.text(0.965, 0.045, metric_txt, transform=axA.transAxes, ha="right", va="bottom", fontsize=7.5,
              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", lw=0.6))
-    axA.set_xlabel("detector channel (low → high angle)")
+    axA.set_xlabel("detector channel")
     axA.set_ylabel("normalized response")
     axA.set_xlim(0.5, 31.5)
     axA.set_ylim(bottom=0)
@@ -408,7 +510,7 @@ def render_career_figure(result: Objective1Result, out_dir: Path | str,
     axA.spines["top"].set_visible(False)
     axA.spines["right"].set_visible(False)
 
-    # ── Panel B — calibration boundary ──────────────────────────────────────────────────────────
+    # ── Panel B — resolution boundary ───────────────────────────────────────────────────────────
     mono = result.monodisperse
     # Restrained sequential grays→one accent; distinct linestyle + marker per diameter for grayscale.
     styles = [("#000000", "-", "o"), ("#333333", "--", "s"), ("#666666", "-.", "^"),
@@ -417,7 +519,7 @@ def render_career_figure(result: Objective1Result, out_dir: Path | str,
         color, ls, mk = styles[i % len(styles)]
         axB.plot(ch, mono["profiles"][:, i], color=color, ls=ls, marker=mk, lw=1.2, ms=3.0,
                  markevery=2, label=f"{d:g} µm")
-    axB.set_xlabel("detector channel (low → high angle)")
+    axB.set_xlabel("detector channel")
     axB.set_ylabel("normalized response")
     axB.set_xlim(0.5, 31.5)
     axB.set_ylim(bottom=0)
@@ -451,8 +553,22 @@ def render_career_figure(result: Objective1Result, out_dir: Path | str,
         for j, c in enumerate(ch):
             w.writerow([int(c)] + [f"{mono['profiles'][j, i]:.6e}" for i in range(len(mono["diams_um"]))])
 
+    geom_csv = out_dir / "objective1_manual_r3_geometry.csv"
+    radii = mc.r3_manual_radii(EDGES)
+    rings = detector_rings()
+    # Manual size boundaries are largest-to-smallest when mapped from inner-to-outer radius.
+    manual_boundaries = np.asarray(EDGES, float)[::-1]
+    with open(geom_csv, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["channel", "manual_size_boundary_um", "radius_lo_mm", "radius_hi_mm",
+                    "theta_lo_medium_deg", "theta_hi_medium_deg"])
+        for j in range(mc.N_CHANNELS):
+            w.writerow([j + 1, f"{manual_boundaries[j]:.8g}", f"{radii[j]:.8g}",
+                        f"{radii[j + 1]:.8g}", f"{rings.theta_lo[j]:.8g}",
+                        f"{rings.theta_hi[j]:.8g}"])
+
     return dict(pdf=pdf_path, png=png_path, measured_vs_predicted_csv=prof_csv,
-                monodisperse_csv=mono_csv)
+                monodisperse_csv=mono_csv, manual_geometry_csv=geom_csv)
 
 
 def write_metrics_json(result: Objective1Result, out_dir: Path | str,
@@ -463,9 +579,9 @@ def write_metrics_json(result: Objective1Result, out_dir: Path | str,
     payload = dict(
         analysis="objective1_operator_feasibility",
         question_A="physical feasibility: certified PSD -> aggregate detector response",
-        question_B="calibration boundary: overlapping monodisperse signatures / limited size rank",
+        question_B="resolution boundary: overlapping monodisperse signatures / limited size rank",
         feasibility=result.feasibility,
-        calibration_boundary=result.boundary,
+        resolution_boundary=result.boundary,
         assumptions=result.assumptions,
         provenance=result.provenance,
         nonclaims=[
@@ -473,7 +589,7 @@ def write_metrics_json(result: Objective1Result, out_dir: Path | str,
             "a single NIST standard does NOT validate every diameter-response column of A",
             "detector channels do NOT uniquely identify particle diameter",
             "quantitative size-resolved flux is NOT established",
-            "the candidate operator is NOT recommended to replace the production operator without "
+            "the evaluated operator is NOT recommended to replace the production operator without "
             "further validation",
         ],
         conclusion="The physical architecture of the observation operator is feasible, but "
@@ -490,35 +606,41 @@ def write_metrics_json(result: Objective1Result, out_dir: Path | str,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        description="Objective-1 grant figure: optical-operator feasibility + calibration boundary "
+        description="Fixed manual-geometry optical-operator evaluation + resolution boundary "
                     "(NIST SRM 1021 forward-operator).")
-    p.add_argument("--nist-rtf", type=Path, default=DEFAULT_NIST_RTF,
-                   help="Clean NIST session .rtf used to calibrate the angular scale.")
-    p.add_argument("--held-out-rtf", type=Path, default=DEFAULT_HELDOUT_RTF,
-                   help="Second same-standard session .rtf for the held-out transfer check "
+    p.add_argument("--study-root", type=Path,
+                   help="pH-study root containing QC/NIST_weekly_QCs; used to resolve both RTFs.")
+    p.add_argument("--nist-rtf", type=Path,
+                   help="NIST SRM 1021 session .rtf used to evaluate the fixed operator.")
+    p.add_argument("--second-session-rtf", "--held-out-rtf", dest="second_session_rtf", type=Path,
+                   help="Second same-standard session .rtf for the cross-session check "
                         "(pass 'none' to skip).")
     p.add_argument("--output-dir", type=Path, required=True,
                    help="Directory for the PDF/PNG/JSON/CSV outputs (e.g. the manuscript "
                         "figures folder). Required — deliverables are never written to a "
                         "default location.")
-    p.add_argument("--theta-min", type=float, default=THETA_MIN_DEG,
-                   help="Fixed inner angular endpoint (deg).")
     p.add_argument("--no-figure", action="store_true", help="Compute + write JSON/CSV only.")
     args = p.parse_args(argv)
 
-    held = None if (args.held_out_rtf is None or str(args.held_out_rtf).lower() == "none") \
-        else args.held_out_rtf
-    if not Path(args.nist_rtf).exists():
-        p.error(f"calibration RTF not found: {args.nist_rtf}")
+    if args.study_root is not None:
+        weekly = args.study_root / "QC" / "NIST_weekly_QCs"
+        default_nist = weekly / DEFAULT_NIST_RTF.name
+        default_held = weekly / DEFAULT_HELDOUT_RTF.name
+    else:
+        default_nist, default_held = DEFAULT_NIST_RTF, DEFAULT_HELDOUT_RTF
+    nist = args.nist_rtf or default_nist
+    second = args.second_session_rtf or default_held
+    second = None if str(second).lower() == "none" else second
+    if not Path(nist).exists():
+        p.error(f"NIST evaluation RTF not found: {nist}")
 
-    print(f"[objective1] calibrating angular scale on {args.nist_rtf}")
-    result = compute_objective1(args.nist_rtf, held, theta_min_deg=args.theta_min)
+    print(f"[objective1] evaluating fixed manual-derived R3 geometry on {nist}")
+    result = compute_objective1(nist, second)
     f = result.feasibility
-    print(f"[objective1] theta_max = {result.theta_max_deg:.2f} deg   cosine(fit) = {f['cosine']:.4f}"
-          + (f"   held-out = {f['held_out_transfer_cosine']:.4f}" if "held_out_transfer_cosine" in f else ""))
-    print(f"[objective1] C_sca gain: no-C_sca best {f['no_csca_best_cosine']:.4f} -> "
-          f"physical {f['cosine']:.4f} (+{f['csca_cosine_gain']:.4f}); at PAQXOS 39.2 deg "
-          f"{f['physical_at_paqxos_theta_max_cosine']:.4f}")
+    print(f"[objective1] angle span = {result.assumptions['theta_min_deg']:.2f}--"
+          f"{result.assumptions['theta_max_deg']:.2f} deg   cosine = {f['cosine']:.4f}"
+          + (f"   second session = {f['second_session_cosine']:.4f}"
+             if "second_session_cosine" in f else ""))
     b = result.boundary
     print(f"[objective1] 2-15 um resolution: eff-rank {b['eff_rank_abs']} abs / "
           f"{b['eff_rank_colnorm']} col-norm; adjacent-column cosine median "

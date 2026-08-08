@@ -212,7 +212,7 @@ def _write_readme(readme_path: Path, *, command, commit, study_root, output_dir,
                      "reached substantially different remaining-signal fractions (g_end annotated). "
                      "(B) At the only common-support extent, g = 0.8, the condition profiles "
                      "substantially overlap. Thin lines are preparation-date means; thick lines are "
-                     "condition means. Detector channels are angularly ordered and are not one-to-one "
+                     "condition means. Detector channels are shown in exported order and are not one-to-one "
                      "particle-size bins; channels 1 and 31 carry the largest detector-edge variability. "
                      "(Not part of the current manuscript figure set.)\n")
     if discrepancies:

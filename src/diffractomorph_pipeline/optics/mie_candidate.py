@@ -1,4 +1,4 @@
-"""Candidate PHYSICAL Mie + detector forward operator — HELOS R3 audit (isolated).
+"""Manual-derived physical Mie + detector forward operator — HELOS R3 audit (isolated).
 
 This module is deliberately **separate from the production operator** (:mod:`optics.mie` /
 :mod:`optics.mie_build`) and does not replace it. It exists to test — during the NIST glass-bead
@@ -21,12 +21,15 @@ For particle diameter ``d`` and detector ring ``j`` spanning ``[θ_lo, θ_hi]``:
 
 Detector geometry
 -----------------
-Only :func:`rings_from_radii` is hardware-derived: it maps a physical ring-radius table through
-``θ = arctan(r / f)`` (R3 focal length ``f = 100 mm``). Absent a manufacturer radius table, the
-default :func:`log_rings` merely **assumes** log-spaced angular boundaries between two endpoints —
-it is NOT a physical geometry and must not be described as one. **Both** angular endpoints
-(``θ_min``, ``θ_max``) are treated as bounded-sensitivity inputs until real ring radii are found; no
-value is privileged (in particular the old PAQXOS-fitted ``θ_max ≈ 39.19°`` is not adopted as truth).
+The manufacturer manual gives the R3 focal length, 31 measuring-class limits, and the Fraunhofer
+first-minimum relation. :func:`r3_manual_radii` uses those quantities to reconstruct 32 nominal
+optical-equivalent boundaries (beam centre plus 31 transformed class limits), and
+:func:`r3_manual_rings` maps them to medium scattering angles. This is traceable to the manual and
+independent of the NIST measurements, but it is not mechanical detector metrology: the manual does
+not supply a detector drawing, ring gaps/centre elements, channel gains, aberration, or blur.
+
+:func:`log_rings` remains only a generic sensitivity helper. It assumes log-spaced angular
+boundaries between supplied endpoints and must not be described as hardware geometry.
 
 Optical constants (fixed; optics are not free parameters during morphology work):
 He–Ne ``λ₀ = 0.6328 µm``; soda-lime glass ``n = 1.52 + 0i`` (SRM 1021 certificate value). The
@@ -46,8 +49,7 @@ N_MED = 1.331                # NOMINAL medium index (water); real medium = pH 7 
                              # buffer, unmeasured → carry as a bounded-sensitivity input, not a fact
 GLASS_RI = 1.52              # soda-lime glass, SRM 1021 certificate value (n = 1.52 + 0i)
 R3_FOCAL_MM = 100.0          # HELOS R3 focal length
-R3_THETA_MIN_DEG = 0.19      # placeholder inner angle (diffraction/lens-range estimate) — a
-                             # SENSITIVITY endpoint, not a measured ring geometry
+R3_THETA_MIN_DEG = 0.19      # generic log_rings sensitivity default; not used by manual geometry
 N_CHANNELS = 31
 
 

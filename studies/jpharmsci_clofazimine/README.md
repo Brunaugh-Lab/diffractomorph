@@ -18,6 +18,15 @@ with this migration.
 `reproduce.py` preflights declared inputs, runs the study recipes, records hashes and code state, and
 checks manuscript artifacts. It does not copy or redistribute source data.
 
+The `manual_r3_operator` recipe reconstructs nominal HELOS R3 annular boundaries from the
+manufacturer's 31 class limits, 100-mm focal length, and Fraunhofer first-minimum relation. It then
+propagates the certified NIST SRM 1021 distribution through a cross-section-weighted annular Mie
+operator. No detector-geometry parameter is fitted to the NIST profiles. The exported geometry CSV
+records every radius and medium-angle boundary; the metrics JSON records the signal-transform,
+certificate-tail, angle-mapping, and channel-orientation sensitivities. This is an evaluation of a
+nominal optical-equivalent geometry, not mechanical detector metrology or a detector-gain
+calibration.
+
 ## External study profiles
 
 The generic wheel does not contain clofazimine calibration payloads. The study bundle must supply
